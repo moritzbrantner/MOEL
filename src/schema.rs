@@ -481,10 +481,7 @@ fn schema_from_table(
         };
 
         if fields.insert(key.clone(), field_schema).is_some() {
-            return Err(SchemaError::DuplicateFieldDeclaration {
-                path,
-                name: key,
-            });
+            return Err(SchemaError::DuplicateFieldDeclaration { path, name: key });
         }
     }
 
