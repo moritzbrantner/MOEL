@@ -81,10 +81,7 @@ id = uuid"550e8400-e29b-41d4-a716-446655440000"
     .expect("marker collision must be avoided");
 
     let root = table(&parsed);
-    assert_eq!(
-        root["existing"],
-        Value::String("__MOEL_UUID_0_0__".into())
-    );
+    assert_eq!(root["existing"], Value::String("__MOEL_UUID_0_0__".into()));
     assert!(matches!(root["id"], Value::Uuid(_)));
 }
 
