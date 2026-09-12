@@ -71,6 +71,23 @@ uuid"550e8400-e29b-41d4-a716-446655440000"
 }
 
 #[test]
+fn multiline_string_closing_quote_runs_do_not_hide_following_extensions() {
+    let parsed = parse(
+        r#"
+basic = """ends with a quote""""
+literal = '''ends with a quote''''
+id = uuid"550e8400-e29b-41d4-a716-446655440000"
+"#,
+    )
+    .expect("valid TOML quote-run endings must preserve scanner state");
+
+    let root = table(&parsed);
+    assert_eq!(root["basic"], Value::String("ends with a quote\"".into()));
+    assert_eq!(root["literal"], Value::String("ends with a quote'".into()));
+    assert!(matches!(root["id"], Value::Uuid(_)));
+}
+
+#[test]
 fn internal_marker_collision_does_not_change_user_strings() {
     let parsed = parse(
         r#"
