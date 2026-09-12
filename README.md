@@ -22,7 +22,7 @@ A data document:
 name = "MOEL"
 id = uuid"550e8400-e29b-41d4-a716-446655440000"
 created = 2026-09-12T20:20:00Z
-tags = ["config", "typed"]
+status = "draft"
 ```
 
 Its optional sibling `schema.moel`:
@@ -31,9 +31,11 @@ Its optional sibling `schema.moel`:
 name = "string"
 id = "uuid"
 created = "utc"
-tags = ["string"]
+nickname? = "string"
+status? = { enum = ["draft", "published", "archived"] }
+tags? = ["string"]
 ```
 
-The first schema version is intentionally exact: declared fields are required and undeclared fields are rejected. Ordinary parsing never requires a schema.
+Tables remain closed by default: undeclared fields are rejected. Fields are required unless their bare schema key ends in `?`; if an optional field is present, its declared type, enum, array, or nested-table schema is still enforced normally. Ordinary parsing never requires a schema.
 
 The implementation is a Rust library and CLI-oriented parser core. See `docs/language.md` for the language and schema contract.
