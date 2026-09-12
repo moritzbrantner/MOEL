@@ -3,7 +3,6 @@ name = "moel"
 version = "0.1.0"
 edition = "2024"
 description = "A small TOML-superset data language with explicit typed primitives"
-license = "MIT OR Apache-2.0"
 repository = "https://github.com/moritzbrantner/MOEL"
 
 [dependencies]
