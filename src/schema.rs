@@ -291,11 +291,14 @@ fn is_enum_declaration(values: &BTreeMap<String, Value>) -> bool {
 
 fn enum_schema(mut values: BTreeMap<String, Value>, path: String) -> Result<Schema, SchemaError> {
     let enum_value = values.remove("enum").expect("enum declaration checked");
-    let Value::Array(values) = enum_value else {
-        return Err(SchemaError::EnumMustBeArray {
-            path,
-            actual: value_kind(&enum_value),
-        });
+    let values = match enum_value {
+        Value::Array(values) => values,
+        other => {
+            return Err(SchemaError::EnumMustBeArray {
+                path,
+                actual: value_kind(&other),
+            });
+        }
     };
 
     if values.is_empty() {
