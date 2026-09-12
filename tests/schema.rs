@@ -150,6 +150,110 @@ strict = 2026-09-12T20:20:00Z
 }
 
 #[test]
+fn enums_are_defined_in_schema_moel() {
+    let schema = parse_schema(
+        r#"
+status = { enum = ["draft", "published", "archived"] }
+"#,
+    )
+    .expect("enum schema must parse");
+
+    let Schema::Table(root) = schema else {
+        panic!("schema root must be a table")
+    };
+    assert_eq!(
+        root["status"],
+        Schema::Enum(vec![
+            "draft".to_owned(),
+            "published".to_owned(),
+            "archived".to_owned()
+        ])
+    );
+}
+
+#[test]
+fn enum_validation_accepts_allowed_values_and_rejects_other_strings() {
+    let schema = parse_schema(
+        r#"
+status = { enum = ["draft", "published"] }
+"#,
+    )
+    .expect("enum schema must parse");
+
+    let valid = parse("status = \"published\"").expect("document must parse");
+    assert!(validate(&valid, &schema).is_empty());
+
+    let invalid = parse("status = \"archived\"").expect("document must parse");
+    let diagnostics = validate(&invalid, &schema);
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].path, "$[\"status\"]");
+    assert!(matches!(
+        &diagnostics[0].kind,
+        DiagnosticKind::InvalidEnumValue { allowed, actual }
+            if allowed == &["draft".to_owned(), "published".to_owned()]
+                && actual == "archived"
+    ));
+}
+
+#[test]
+fn enum_validation_rejects_non_string_values() {
+    let schema = parse_schema(
+        r#"
+status = { enum = ["draft", "published"] }
+"#,
+    )
+    .expect("enum schema must parse");
+    let document = parse("status = 1").expect("document must parse");
+    let diagnostics = validate(&document, &schema);
+
+    assert_eq!(diagnostics.len(), 1);
+    assert!(matches!(
+        diagnostics[0].kind,
+        DiagnosticKind::TypeMismatch {
+            expected: "enum",
+            actual: "integer"
+        }
+    ));
+}
+
+#[test]
+fn any_is_not_a_schema_type() {
+    let error = parse_schema("value = \"any\"").expect_err("any must not be a schema type");
+    assert!(matches!(
+        error,
+        SchemaError::UnknownType { name, .. } if name == "any"
+    ));
+}
+
+#[test]
+fn malformed_enum_declarations_fail_closed() {
+    let empty = parse_schema("value = { enum = [] }").expect_err("empty enum must fail");
+    assert!(matches!(empty, SchemaError::EmptyEnum { .. }));
+
+    let scalar = parse_schema("value = { enum = \"draft\" }")
+        .expect_err("enum declaration must use an array");
+    assert!(matches!(scalar, SchemaError::EnumMustBeArray { .. }));
+
+    let non_string =
+        parse_schema("value = { enum = [\"draft\", 2] }").expect_err("enum values must be strings");
+    assert!(matches!(
+        non_string,
+        SchemaError::EnumValueMustBeString {
+            index: 1,
+            actual: "integer",
+            ..
+        }
+    ));
+
+    let duplicate = parse_schema("value = { enum = [\"draft\", \"draft\"] }")
+        .expect_err("duplicate enum values must fail");
+    assert!(matches!(
+        duplicate,
+        SchemaError::DuplicateEnumValue { value, .. } if value == "draft"
+    ));
+}
+
+#[test]
 fn malformed_schema_shapes_fail_closed() {
     let unknown = parse_schema("value = \"mystery\"").expect_err("unknown type must fail");
     assert!(matches!(unknown, SchemaError::UnknownType { .. }));

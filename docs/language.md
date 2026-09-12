@@ -47,6 +47,7 @@ name = "string"
 id = "uuid"
 created = "utc"
 score = "number"
+status = { enum = ["draft", "published", "archived"] }
 tags = ["string"]
 
 [profile]
@@ -56,9 +57,8 @@ active = "boolean"
 
 Leaf strings are type names. Nested tables describe nested tables. A one-element array describes a homogeneous array whose every item must match the contained schema.
 
-The initial scalar type set is:
+The scalar type set is:
 
-- `any`: any MOEL value;
 - `string`: TOML/MOEL string;
 - `integer`: integer only;
 - `float`: floating-point value only;
@@ -68,9 +68,23 @@ The initial scalar type set is:
 - `utc`: a date-time explicitly carrying UTC semantics;
 - `datetime`: any TOML date/time value, including UTC values.
 
-Unknown type names, empty schema arrays, arrays with more than one schema item, and ordinary data literals used as schema declarations fail closed as invalid schemas.
+There is deliberately no `any` type. A schema should state the expected shape instead of opting out of validation.
 
-### 4.2 Initial table semantics
+### 4.2 Enums
+
+String enums are defined directly in `schema.moel` with an enum declaration:
+
+```moel
+status = { enum = ["draft", "published", "archived"] }
+```
+
+The corresponding data value must be a string and must exactly match one of the declared values.
+
+Enum declarations fail closed. The value list must be a non-empty array of unique strings. Empty enums, non-string enum members, duplicate values, and a non-array `enum` value are invalid schemas.
+
+A schema table containing exactly one `enum` key is interpreted as an enum declaration. Other tables continue to describe nested document tables.
+
+### 4.3 Initial table semantics
 
 Version 1 table schemas are exact:
 
@@ -81,7 +95,7 @@ Version 1 table schemas are exact:
 
 Optional fields and explicitly open tables are intentionally deferred until their syntax can be added without weakening the simple shape model.
 
-### 4.3 Validation boundary
+### 4.4 Validation boundary
 
 Schema parsing and document parsing are distinct from validation. Implementations should preserve that distinction in diagnostics: malformed MOEL, malformed `schema.moel`, and a well-formed document that violates its schema are different failures.
 
@@ -102,4 +116,5 @@ The implementation should continuously test these boundaries:
 3. extension-looking text inside TOML strings and comments is never treated as MOEL syntax;
 4. schema-less parsing never starts requiring `schema.moel`;
 5. schema validation preserves UUID and UTC semantic distinctions;
-6. malformed schemas fail closed rather than silently weakening validation.
+6. enum declarations are deterministic and fail closed when malformed;
+7. malformed schemas fail closed rather than silently weakening validation.
