@@ -8,10 +8,11 @@ pub const SCHEMA_FILE_NAME: &str = "schema.moel";
 
 /// A semantic MOEL schema.
 ///
-/// Schemas deliberately reuse MOEL values instead of introducing a second
-/// parser or schema language. Tables describe table shapes, one-element arrays
-/// describe homogeneous arrays, strings name scalar types, and enum declarations
-/// constrain strings to an explicit set of values.
+/// Schemas deliberately stay close to MOEL values instead of introducing a
+/// separate schema language. Tables describe table shapes, one-element arrays
+/// describe homogeneous arrays, strings name scalar types, enum declarations
+/// constrain strings to an explicit set of values, and `Optional` marks fields
+/// whose presence is not required.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Schema {
     String,
@@ -24,6 +25,7 @@ pub enum Schema {
     Datetime,
     Enum(Vec<String>),
     Array(Box<Schema>),
+    Optional(Box<Schema>),
     Table(BTreeMap<String, Schema>),
 }
 
@@ -58,6 +60,10 @@ pub enum SchemaError {
         path: String,
         value: String,
     },
+    DuplicateFieldDeclaration {
+        path: String,
+        name: String,
+    },
     InvalidSchemaValue {
         path: String,
         actual: &'static str,
@@ -79,12 +85,10 @@ impl fmt::Display for SchemaError {
                 f,
                 "schema array at {path} must contain exactly one item schema, found {actual}"
             ),
-            Self::EmptyEnum { path } => {
-                write!(
-                    f,
-                    "enum declaration at {path} must contain at least one value"
-                )
-            }
+            Self::EmptyEnum { path } => write!(
+                f,
+                "enum declaration at {path} must contain at least one value"
+            ),
             Self::EnumMustBeArray { path, actual } => write!(
                 f,
                 "enum declaration at {path} must use an array of strings, found {actual}"
@@ -97,12 +101,14 @@ impl fmt::Display for SchemaError {
                 f,
                 "enum declaration at {path} has non-string value at index {index}: found {actual}"
             ),
-            Self::DuplicateEnumValue { path, value } => {
-                write!(
-                    f,
-                    "enum declaration at {path} contains duplicate value {value:?}"
-                )
-            }
+            Self::DuplicateEnumValue { path, value } => write!(
+                f,
+                "enum declaration at {path} contains duplicate value {value:?}"
+            ),
+            Self::DuplicateFieldDeclaration { path, name } => write!(
+                f,
+                "schema declares field {name:?} more than once at {path} after optional-field normalization"
+            ),
             Self::InvalidSchemaValue { path, actual } => write!(
                 f,
                 "invalid schema value at {path}: expected a type name, enum declaration, table, or one-element array, found {actual}"
@@ -203,20 +209,23 @@ impl std::error::Error for ValidatedDocumentError {
 /// The schema root is always a table. Leaf strings name types. A one-element
 /// array contains the schema for every array item. Nested tables describe nested
 /// document tables. A table of the form `{ enum = ["a", "b"] }` declares a
-/// string enum.
+/// string enum. A bare schema field or table key ending in `?` marks that field
+/// optional; the `?` is not part of the data-document key.
 pub fn parse_schema(source: &str) -> Result<Schema, SchemaError> {
-    let value = parse(source)?;
+    let rewritten = rewrite_optional_field_keys(source);
+    let value = parse(&rewritten.source)?;
     let Value::Table(values) = value else {
         return Err(SchemaError::RootMustBeTable);
     };
 
-    schema_from_table(values, "$".to_owned())
+    schema_from_table(values, "$".to_owned(), &rewritten.optional_fields)
 }
 
 /// Validate a parsed MOEL value against a schema.
 ///
-/// Version 1 schemas are intentionally exact: every declared table field is
-/// required and undeclared fields are rejected.
+/// Tables remain closed by default. Required fields must be present; optional
+/// fields may be absent. Whenever an optional field is present, its inner schema
+/// is validated normally.
 pub fn validate(value: &Value, schema: &Schema) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     validate_at(value, schema, "$", &mut diagnostics);
@@ -260,19 +269,230 @@ pub fn schema_path_for(document_path: impl AsRef<Path>) -> Option<PathBuf> {
     )
 }
 
-fn schema_from_table(values: BTreeMap<String, Value>, path: String) -> Result<Schema, SchemaError> {
-    let fields = values
-        .into_iter()
-        .map(|(key, value)| {
-            let child_path = field_path(&path, &key);
-            Ok((key, schema_from_value(value, child_path)?))
-        })
-        .collect::<Result<BTreeMap<_, _>, SchemaError>>()?;
+#[derive(Debug)]
+struct RewrittenSchemaSource {
+    source: String,
+    optional_fields: BTreeMap<String, String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SchemaLexState {
+    Normal,
+    Comment,
+    BasicString,
+    LiteralString,
+    MultilineBasicString,
+    MultilineLiteralString,
+}
+
+fn rewrite_optional_field_keys(source: &str) -> RewrittenSchemaSource {
+    let mut output = String::with_capacity(source.len());
+    let mut optional_fields = BTreeMap::new();
+    let mut state = SchemaLexState::Normal;
+    let mut i = 0;
+    let mut marker_index = 0_u32;
+
+    while i < source.len() {
+        match state {
+            SchemaLexState::Normal => {
+                if source[i..].starts_with('#') {
+                    output.push('#');
+                    i += 1;
+                    state = SchemaLexState::Comment;
+                    continue;
+                }
+                if source[i..].starts_with("\"\"\"") {
+                    output.push_str("\"\"\"");
+                    i += 3;
+                    state = SchemaLexState::MultilineBasicString;
+                    continue;
+                }
+                if source[i..].starts_with("'''") {
+                    output.push_str("'''");
+                    i += 3;
+                    state = SchemaLexState::MultilineLiteralString;
+                    continue;
+                }
+                if source[i..].starts_with('"') {
+                    output.push('"');
+                    i += 1;
+                    state = SchemaLexState::BasicString;
+                    continue;
+                }
+                if source[i..].starts_with('\'') {
+                    output.push('\'');
+                    i += 1;
+                    state = SchemaLexState::LiteralString;
+                    continue;
+                }
+
+                if source[i..].starts_with('?')
+                    && let Some((key_start, key)) = optional_bare_key_before(source, i)
+                    && optional_key_delimiter_after(source, i + 1)
+                {
+                    let key_len = i - key_start;
+                    output.truncate(output.len() - key_len);
+                    let marker = next_optional_marker(source, &optional_fields, &mut marker_index);
+                    output.push('"');
+                    output.push_str(&marker);
+                    output.push('"');
+                    optional_fields.insert(marker, key.to_owned());
+                    i += 1;
+                    continue;
+                }
+
+                push_next_char(source, &mut output, &mut i);
+            }
+            SchemaLexState::Comment => {
+                let ch = next_char(source, i);
+                output.push(ch);
+                i += ch.len_utf8();
+                if ch == '\n' {
+                    state = SchemaLexState::Normal;
+                }
+            }
+            SchemaLexState::BasicString => {
+                let ch = next_char(source, i);
+                output.push(ch);
+                i += ch.len_utf8();
+                if ch == '\\' && i < source.len() {
+                    push_next_char(source, &mut output, &mut i);
+                } else if ch == '"' {
+                    state = SchemaLexState::Normal;
+                }
+            }
+            SchemaLexState::LiteralString => {
+                let ch = next_char(source, i);
+                output.push(ch);
+                i += ch.len_utf8();
+                if ch == '\'' {
+                    state = SchemaLexState::Normal;
+                }
+            }
+            SchemaLexState::MultilineBasicString => {
+                let quote_run = repeated_ascii_char_len(source, i, '"');
+                if quote_run >= 3 {
+                    output.push_str(&source[i..i + quote_run]);
+                    i += quote_run;
+                    state = SchemaLexState::Normal;
+                } else {
+                    let ch = next_char(source, i);
+                    output.push(ch);
+                    i += ch.len_utf8();
+                    if ch == '\\' && i < source.len() {
+                        push_next_char(source, &mut output, &mut i);
+                    }
+                }
+            }
+            SchemaLexState::MultilineLiteralString => {
+                let quote_run = repeated_ascii_char_len(source, i, '\'');
+                if quote_run >= 3 {
+                    output.push_str(&source[i..i + quote_run]);
+                    i += quote_run;
+                    state = SchemaLexState::Normal;
+                } else {
+                    push_next_char(source, &mut output, &mut i);
+                }
+            }
+        }
+    }
+
+    RewrittenSchemaSource {
+        source: output,
+        optional_fields,
+    }
+}
+
+fn optional_bare_key_before(source: &str, question_index: usize) -> Option<(usize, &str)> {
+    let bytes = source.as_bytes();
+    let mut start = question_index;
+    while start > 0 && is_bare_key_byte(bytes[start - 1]) {
+        start -= 1;
+    }
+    (start < question_index).then(|| (start, &source[start..question_index]))
+}
+
+fn optional_key_delimiter_after(source: &str, mut index: usize) -> bool {
+    while index < source.len() && source.as_bytes()[index].is_ascii_whitespace() {
+        index += 1;
+    }
+    source[index..]
+        .chars()
+        .next()
+        .is_some_and(|ch| matches!(ch, '=' | ']' | '.'))
+}
+
+fn is_bare_key_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')
+}
+
+fn next_optional_marker(
+    source: &str,
+    optional_fields: &BTreeMap<String, String>,
+    marker_index: &mut u32,
+) -> String {
+    loop {
+        let marker = format!("__MOEL_OPTIONAL_FIELD_{}__", *marker_index);
+        *marker_index += 1;
+        if !source.contains(&marker) && !optional_fields.contains_key(&marker) {
+            return marker;
+        }
+    }
+}
+
+fn repeated_ascii_char_len(source: &str, index: usize, target: char) -> usize {
+    source[index..]
+        .bytes()
+        .take_while(|byte| *byte == target as u8)
+        .count()
+}
+
+fn next_char(source: &str, index: usize) -> char {
+    source[index..]
+        .chars()
+        .next()
+        .expect("index is inside source")
+}
+
+fn push_next_char(source: &str, output: &mut String, index: &mut usize) {
+    let ch = next_char(source, *index);
+    output.push(ch);
+    *index += ch.len_utf8();
+}
+
+fn schema_from_table(
+    values: BTreeMap<String, Value>,
+    path: String,
+    optional_fields: &BTreeMap<String, String>,
+) -> Result<Schema, SchemaError> {
+    let mut fields = BTreeMap::new();
+
+    for (raw_key, value) in values {
+        let (key, optional) = match optional_fields.get(&raw_key) {
+            Some(key) => (key.clone(), true),
+            None => (raw_key, false),
+        };
+        let child_path = field_path(&path, &key);
+        let field_schema = schema_from_value(value, child_path, optional_fields)?;
+        let field_schema = if optional {
+            Schema::Optional(Box::new(field_schema))
+        } else {
+            field_schema
+        };
+
+        if fields.insert(key.clone(), field_schema).is_some() {
+            return Err(SchemaError::DuplicateFieldDeclaration { path, name: key });
+        }
+    }
 
     Ok(Schema::Table(fields))
 }
 
-fn schema_from_value(value: Value, path: String) -> Result<Schema, SchemaError> {
+fn schema_from_value(
+    value: Value,
+    path: String,
+    optional_fields: &BTreeMap<String, String>,
+) -> Result<Schema, SchemaError> {
     match value {
         Value::String(name) => scalar_schema(&name).ok_or(SchemaError::UnknownType { path, name }),
         Value::Array(values) if values.is_empty() => Err(SchemaError::EmptyArray { path }),
@@ -285,10 +505,11 @@ fn schema_from_value(value: Value, path: String) -> Result<Schema, SchemaError> 
             Ok(Schema::Array(Box::new(schema_from_value(
                 item,
                 format!("{path}[0]"),
+                optional_fields,
             )?)))
         }
         Value::Table(values) if is_enum_declaration(&values) => enum_schema(values, path),
-        Value::Table(values) => schema_from_table(values, path),
+        Value::Table(values) => schema_from_table(values, path, optional_fields),
         other => Err(SchemaError::InvalidSchemaValue {
             path,
             actual: value_kind(&other),
@@ -421,6 +642,7 @@ fn validate_at(value: &Value, schema: &Schema, path: &str, diagnostics: &mut Vec
                 validate_at(item, item_schema, &format!("{path}[{index}]"), diagnostics);
             }
         }
+        Schema::Optional(inner) => validate_at(value, inner, path, diagnostics),
         Schema::Table(fields) => {
             let Value::Table(values) = value else {
                 type_mismatch(value, "table", path, diagnostics);
@@ -431,7 +653,7 @@ fn validate_at(value: &Value, schema: &Schema, path: &str, diagnostics: &mut Vec
                 let child_path = field_path(path, key);
                 if let Some(field_value) = values.get(key) {
                     validate_at(field_value, field_schema, &child_path, diagnostics);
-                } else {
+                } else if !matches!(field_schema, Schema::Optional(_)) {
                     diagnostics.push(Diagnostic {
                         path: child_path,
                         kind: DiagnosticKind::MissingField,
