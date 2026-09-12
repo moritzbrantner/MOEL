@@ -40,19 +40,20 @@ This convention does not reserve any key in the data document. In particular, a 
 
 ### 4.1 Schema syntax
 
-A schema is itself a MOEL document. Its shape mirrors the shape of the data document:
+A schema uses MOEL values and mirrors the shape of the data document. It adds one schema-only key annotation: a trailing `?` on a bare field name means the field is optional.
 
 ```moel
 name = "string"
+nickname? = "string"
 id = "uuid"
 created = "utc"
-score = "number"
-status = { enum = ["draft", "published", "archived"] }
-tags = ["string"]
+score? = "number"
+status? = { enum = ["draft", "published", "archived"] }
+tags? = ["string"]
 
-[profile]
+[profile?]
 age = "integer"
-active = "boolean"
+active? = "boolean"
 ```
 
 Leaf strings are type names. Nested tables describe nested tables. A one-element array describes a homogeneous array whose every item must match the contained schema.
@@ -84,18 +85,54 @@ Enum declarations fail closed. The value list must be a non-empty array of uniqu
 
 A schema table containing exactly one `enum` key is interpreted as an enum declaration. Other tables continue to describe nested document tables.
 
-### 4.3 Initial table semantics
+### 4.3 Optional fields
 
-Version 1 table schemas are exact:
+A trailing `?` on a **bare schema key** removes only the presence requirement:
 
-- every declared field is required;
+```moel
+name = "string"
+nickname? = "string"
+status? = { enum = ["draft", "published"] }
+tags? = ["string"]
+```
+
+The data-document keys are `name`, `nickname`, `status`, and `tags`; the `?` is schema notation and is not part of the corresponding data key.
+
+If an optional field is absent, validation succeeds for that field. If it is present, its declared schema is enforced normally. Optionality therefore does not mean `any`, does not disable enum checking, and does not make a nested table open.
+
+A nested table may also be optional:
+
+```moel
+[profile?]
+age = "integer"
+active? = "boolean"
+```
+
+The entire `profile` table may be absent. If it is present, `age` remains required while `active` is optional.
+
+The optional marker is recognized only by `schema.moel` parsing. It is ignored inside comments and string values. Quoted keys do not use the annotation, so:
+
+```moel
+"question?" = "string"
+```
+
+declares a required literal data key named `question?`.
+
+A schema may not declare both `name` and `name?`; they normalize to the same data-document field and the schema fails closed as a duplicate declaration.
+
+### 4.4 Table semantics
+
+Tables are closed by default:
+
+- required fields must be present;
+- optional fields may be absent;
 - every undeclared field is rejected;
 - nested tables follow the same rule;
 - validation diagnostics identify the exact field or array item path.
 
-Optional fields and explicitly open tables are intentionally deferred until their syntax can be added without weakening the simple shape model.
+Explicitly open tables remain deferred. Optional fields do not weaken closed-table validation.
 
-### 4.4 Validation boundary
+### 4.5 Validation boundary
 
 Schema parsing and document parsing are distinct from validation. Implementations should preserve that distinction in diagnostics: malformed MOEL, malformed `schema.moel`, and a well-formed document that violates its schema are different failures.
 
@@ -117,4 +154,7 @@ The implementation should continuously test these boundaries:
 4. schema-less parsing never starts requiring `schema.moel`;
 5. schema validation preserves UUID and UTC semantic distinctions;
 6. enum declarations are deterministic and fail closed when malformed;
-7. malformed schemas fail closed rather than silently weakening validation.
+7. optional-field syntax changes presence only and still validates present values;
+8. quoted question-mark keys remain literal keys;
+9. normalized duplicate required/optional declarations fail closed;
+10. malformed schemas fail closed rather than silently weakening validation.
