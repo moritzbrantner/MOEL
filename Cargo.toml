@@ -6,7 +6,7 @@ description = "A small TOML-superset data language with explicit typed primitive
 repository = "https://github.com/moritzbrantner/MOEL"
 
 [dependencies]
-toml = "0.9"
+toml = "1"
 uuid = { version = "1", features = ["std"] }
 
 [dev-dependencies]
