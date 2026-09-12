@@ -331,7 +331,8 @@ fn collect_strings_into<'a>(value: &'a Value, strings: &mut Vec<&'a str>) {
             }
         }
         Value::Table(values) => {
-            for value in values.values() {
+            for (key, value) in values {
+                strings.push(key);
                 collect_strings_into(value, strings);
             }
         }
