@@ -53,6 +53,54 @@ ids = [uuid"6ba7b810-9dad-11d1-80b4-00c04fd430c8"]
 }
 
 #[test]
+fn uuid_literals_after_array_comments_use_value_context() {
+    let parsed = parse(
+        r#"
+ids = [ # first value follows comment text containing = [ ,
+    uuid"550e8400-e29b-41d4-a716-446655440000", # comma establishes the next value boundary
+    # another comment must not hide that boundary
+    uuid"6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+]
+"#,
+    )
+    .expect("comments must not hide UUID array value boundaries");
+
+    let root = table(&parsed);
+    let Value::Array(ids) = &root["ids"] else {
+        panic!("expected UUID array")
+    };
+    assert_eq!(ids.len(), 2);
+    assert!(matches!(ids[0], Value::Uuid(_)));
+    assert!(matches!(ids[1], Value::Uuid(_)));
+}
+
+#[test]
+fn ordinary_toml_array_comments_keep_extension_text_inert() {
+    let parsed = parse(
+        r#"
+values = [ # uuid"550e8400-e29b-41d4-a716-446655440000" = [ ,
+    "uuid\"550e8400-e29b-41d4-a716-446655440000\"",
+    # uuid"6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+    "plain",
+]
+"#,
+    )
+    .expect("ordinary TOML strings and comments must remain ordinary TOML");
+
+    let root = table(&parsed);
+    let Value::Array(values) = &root["values"] else {
+        panic!("expected string array")
+    };
+    assert_eq!(
+        values,
+        &[
+            Value::String("uuid\"550e8400-e29b-41d4-a716-446655440000\"".into()),
+            Value::String("plain".into()),
+        ]
+    );
+}
+
+#[test]
 fn extension_looking_text_in_strings_and_comments_is_not_rewritten() {
     let parsed = parse(
         r#"
