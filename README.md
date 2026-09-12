@@ -10,8 +10,30 @@ The core compatibility rule is simple: **every valid TOML document must also be 
 - Small, explicit extensions rather than a second unrelated syntax.
 - First-class UUID values.
 - UTC timestamps retain UTC semantics.
-- Optional `schema.moel` validation without requiring schemas for ordinary documents.
-- Deterministic parsing and serialization.
+- Optional sibling `schema.moel` validation without reserving a data-document key.
+- Deterministic parsing, serialization, and validation.
 - A compact data format; no XML-style ceremony.
 
-The first implementation is a Rust library and CLI-oriented parser core. See `docs/language.md` as the language contract grows.
+## Schema example
+
+A data document:
+
+```moel
+name = "MOEL"
+id = uuid"550e8400-e29b-41d4-a716-446655440000"
+created = 2026-09-12T20:20:00Z
+tags = ["config", "typed"]
+```
+
+Its optional sibling `schema.moel`:
+
+```moel
+name = "string"
+id = "uuid"
+created = "utc"
+tags = ["string"]
+```
+
+The first schema version is intentionally exact: declared fields are required and undeclared fields are rejected. Ordinary parsing never requires a schema.
+
+The implementation is a Rust library and CLI-oriented parser core. See `docs/language.md` for the language and schema contract.
