@@ -31,18 +31,37 @@ pub enum Schema {
 pub enum SchemaError {
     Parse(ParseError),
     RootMustBeTable,
-    UnknownType { path: String, name: String },
-    EmptyArray { path: String },
-    ArrayMustHaveSingleElement { path: String, actual: usize },
-    EmptyEnum { path: String },
-    EnumMustBeArray { path: String, actual: &'static str },
+    UnknownType {
+        path: String,
+        name: String,
+    },
+    EmptyArray {
+        path: String,
+    },
+    ArrayMustHaveSingleElement {
+        path: String,
+        actual: usize,
+    },
+    EmptyEnum {
+        path: String,
+    },
+    EnumMustBeArray {
+        path: String,
+        actual: &'static str,
+    },
     EnumValueMustBeString {
         path: String,
         index: usize,
         actual: &'static str,
     },
-    DuplicateEnumValue { path: String, value: String },
-    InvalidSchemaValue { path: String, actual: &'static str },
+    DuplicateEnumValue {
+        path: String,
+        value: String,
+    },
+    InvalidSchemaValue {
+        path: String,
+        actual: &'static str,
+    },
 }
 
 impl fmt::Display for SchemaError {
@@ -61,7 +80,10 @@ impl fmt::Display for SchemaError {
                 "schema array at {path} must contain exactly one item schema, found {actual}"
             ),
             Self::EmptyEnum { path } => {
-                write!(f, "enum declaration at {path} must contain at least one value")
+                write!(
+                    f,
+                    "enum declaration at {path} must contain at least one value"
+                )
             }
             Self::EnumMustBeArray { path, actual } => write!(
                 f,
@@ -76,7 +98,10 @@ impl fmt::Display for SchemaError {
                 "enum declaration at {path} has non-string value at index {index}: found {actual}"
             ),
             Self::DuplicateEnumValue { path, value } => {
-                write!(f, "enum declaration at {path} contains duplicate value {value:?}")
+                write!(
+                    f,
+                    "enum declaration at {path} contains duplicate value {value:?}"
+                )
             }
             Self::InvalidSchemaValue { path, actual } => write!(
                 f,
@@ -308,12 +333,15 @@ fn enum_schema(mut values: BTreeMap<String, Value>, path: String) -> Result<Sche
     let mut seen = BTreeSet::new();
     let mut allowed = Vec::with_capacity(values.len());
     for (index, value) in values.into_iter().enumerate() {
-        let Value::String(value) = value else {
-            return Err(SchemaError::EnumValueMustBeString {
-                path,
-                index,
-                actual: value_kind(&value),
-            });
+        let value = match value {
+            Value::String(value) => value,
+            other => {
+                return Err(SchemaError::EnumValueMustBeString {
+                    path,
+                    index,
+                    actual: value_kind(&other),
+                });
+            }
         };
 
         if !seen.insert(value.clone()) {
@@ -423,12 +451,7 @@ fn validate_at(value: &Value, schema: &Schema, path: &str, diagnostics: &mut Vec
     }
 }
 
-fn validate_enum(
-    value: &Value,
-    allowed: &[String],
-    path: &str,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
+fn validate_enum(value: &Value, allowed: &[String], path: &str, diagnostics: &mut Vec<Diagnostic>) {
     let Value::String(actual) = value else {
         type_mismatch(value, "enum", path, diagnostics);
         return;
