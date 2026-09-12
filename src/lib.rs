@@ -64,7 +64,7 @@ impl From<toml::ser::Error> for Error {
 pub fn parse(source: &str) -> Result<Value, Error> {
     for salt in 0_u32.. {
         let rewritten = rewrite_uuid_literals(source, salt)?;
-        let parsed: toml::Value = rewritten.source.parse()?;
+        let parsed: toml::Value = toml::from_str(&rewritten.source)?;
 
         if markers_are_unique(&parsed, &rewritten.uuids) {
             return Ok(from_toml(parsed, &rewritten.uuids));
@@ -396,7 +396,7 @@ fn to_toml_inner(
 }
 
 fn parse_datetime(value: &str) -> Result<toml::Value, Error> {
-    let document: toml::Value = format!("value = {value}").parse()?;
+    let document: toml::Value = toml::from_str(&format!("value = {value}"))?;
     document
         .get("value")
         .cloned()
