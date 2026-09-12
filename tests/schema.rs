@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
+use moel::parse;
 use moel::schema::{
     DiagnosticKind, Schema, SchemaError, ValidatedDocumentError, parse_schema, parse_validated,
     schema_path_for, validate,
 };
-use moel::parse;
 
 const SCHEMA: &str = r#"
 name = "string"
@@ -122,7 +122,10 @@ active = "yes"
         }
     ));
     assert_eq!(diagnostics[6].path, "$[\"extra\"]");
-    assert!(matches!(diagnostics[6].kind, DiagnosticKind::UnexpectedField));
+    assert!(matches!(
+        diagnostics[6].kind,
+        DiagnosticKind::UnexpectedField
+    ));
 }
 
 #[test]
