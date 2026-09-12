@@ -1,0 +1,13 @@
+[package]
+name = "moel"
+version = "0.1.0"
+edition = "2024"
+description = "A small TOML-superset data language with explicit typed primitives"
+repository = "https://github.com/moritzbrantner/MOEL"
+
+[dependencies]
+toml = "1"
+uuid = { version = "1", features = ["std"] }
+
+[dev-dependencies]
+pretty_assertions = "1"
