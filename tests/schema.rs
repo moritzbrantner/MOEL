@@ -234,8 +234,8 @@ fn malformed_enum_declarations_fail_closed() {
         .expect_err("enum declaration must use an array");
     assert!(matches!(scalar, SchemaError::EnumMustBeArray { .. }));
 
-    let non_string = parse_schema("value = { enum = [\"draft\", 2] }")
-        .expect_err("enum values must be strings");
+    let non_string =
+        parse_schema("value = { enum = [\"draft\", 2] }").expect_err("enum values must be strings");
     assert!(matches!(
         non_string,
         SchemaError::EnumValueMustBeString {
