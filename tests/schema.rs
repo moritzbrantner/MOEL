@@ -217,6 +217,149 @@ status = { enum = ["draft", "published"] }
 }
 
 #[test]
+fn optional_field_suffix_removes_presence_requirement() {
+    let schema = parse_schema(
+        r#"
+name = "string"
+nickname? = "string"
+status? = { enum = ["draft", "published"] }
+tags? = ["string"]
+"#,
+    )
+    .expect("optional schema must parse");
+
+    let Schema::Table(root) = &schema else {
+        panic!("schema root must be a table")
+    };
+    assert_eq!(
+        root["nickname"],
+        Schema::Optional(Box::new(Schema::String))
+    );
+    assert!(matches!(root["status"], Schema::Optional(_)));
+    assert!(matches!(root["tags"], Schema::Optional(_)));
+
+    let document = parse("name = \"MOEL\"").expect("document must parse");
+    assert!(validate(&document, &schema).is_empty());
+}
+
+#[test]
+fn present_optional_fields_still_validate_their_schema() {
+    let schema = parse_schema(
+        r#"
+nickname? = "string"
+status? = { enum = ["draft", "published"] }
+"#,
+    )
+    .expect("optional schema must parse");
+    let document = parse(
+        r#"
+nickname = 42
+status = "archived"
+"#,
+    )
+    .expect("document must parse");
+    let diagnostics = validate(&document, &schema);
+
+    assert_eq!(diagnostics.len(), 2);
+    assert_eq!(diagnostics[0].path, "$[\"nickname\"]");
+    assert!(matches!(
+        diagnostics[0].kind,
+        DiagnosticKind::TypeMismatch {
+            expected: "string",
+            actual: "integer"
+        }
+    ));
+    assert_eq!(diagnostics[1].path, "$[\"status\"]");
+    assert!(matches!(
+        diagnostics[1].kind,
+        DiagnosticKind::InvalidEnumValue { .. }
+    ));
+}
+
+#[test]
+fn optional_table_may_be_absent_but_is_exact_when_present() {
+    let schema = parse_schema(
+        r#"
+name = "string"
+
+[profile?]
+age = "integer"
+active? = "boolean"
+"#,
+    )
+    .expect("optional table schema must parse");
+
+    let absent = parse("name = \"MOEL\"").expect("document must parse");
+    assert!(validate(&absent, &schema).is_empty());
+
+    let present = parse(
+        r#"
+name = "MOEL"
+[profile]
+active = true
+"#,
+    )
+    .expect("document must parse");
+    let diagnostics = validate(&present, &schema);
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].path, "$[\"profile\"][\"age\"]");
+    assert!(matches!(diagnostics[0].kind, DiagnosticKind::MissingField));
+}
+
+#[test]
+fn quoted_question_mark_key_is_literal_and_required() {
+    let schema = parse_schema("\"question?\" = \"string\"").expect("quoted key must parse");
+    let Schema::Table(root) = &schema else {
+        panic!("schema root must be a table")
+    };
+    assert_eq!(root["question?"], Schema::String);
+
+    let missing = parse("").expect("empty document must parse");
+    let diagnostics = validate(&missing, &schema);
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].path, "$[\"question?\"]");
+
+    let present = parse("\"question?\" = \"yes\"").expect("document must parse");
+    assert!(validate(&present, &schema).is_empty());
+}
+
+#[test]
+fn required_and_optional_spellings_of_same_field_fail_closed() {
+    let error = parse_schema(
+        r#"
+name = "string"
+name? = "string"
+"#,
+    )
+    .expect_err("normalized duplicate field must fail");
+    assert!(matches!(
+        error,
+        SchemaError::DuplicateFieldDeclaration { name, .. } if name == "name"
+    ));
+}
+
+#[test]
+fn optional_marker_inside_strings_and_comments_is_not_schema_syntax() {
+    let schema = parse_schema(
+        r#"
+# ignored? = "string"
+example = { enum = ["what?", "why?"] }
+"question?" = "string"
+"#,
+    )
+    .expect("question marks outside bare keys must be preserved");
+
+    let Schema::Table(root) = schema else {
+        panic!("schema root must be a table")
+    };
+    assert!(root.contains_key("question?"));
+    assert_eq!(
+        root["example"],
+        Schema::Enum(vec!["what?".to_owned(), "why?".to_owned()])
+    );
+}
+
+#[test]
 fn any_is_not_a_schema_type() {
     let error = parse_schema("value = \"any\"").expect_err("any must not be a schema type");
     assert!(matches!(
