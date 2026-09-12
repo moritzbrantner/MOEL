@@ -103,6 +103,21 @@ id = uuid"550e8400-e29b-41d4-a716-446655440000"
 }
 
 #[test]
+fn serialization_marker_collision_with_table_key_is_avoided() {
+    let source = r#"
+"__MOEL_SERIALIZED_UUID_0__" = "keep this key"
+id = uuid"550e8400-e29b-41d4-a716-446655440000"
+"#;
+
+    let first = parse(source).expect("source must parse");
+    let serialized = to_string(&first).expect("document must serialize");
+    let second = parse(&serialized).expect("serialized MOEL must parse");
+
+    assert_eq!(second, first);
+    assert!(serialized.contains("\"__MOEL_SERIALIZED_UUID_0__\" = \"keep this key\""));
+}
+
+#[test]
 fn utc_timestamp_semantics_are_explicit() {
     let parsed = parse(
         r#"
