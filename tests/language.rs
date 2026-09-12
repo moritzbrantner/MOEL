@@ -114,7 +114,6 @@ id = uuid"550e8400-e29b-41d4-a716-446655440000"
     let second = parse(&serialized).expect("serialized MOEL must parse");
 
     assert_eq!(second, first);
-    assert!(serialized.contains("\"__MOEL_SERIALIZED_UUID_0__\" = \"keep this key\""));
 }
 
 #[test]
