@@ -356,7 +356,8 @@ fn to_toml_inner(
             let marker = loop {
                 let candidate = format!("__MOEL_SERIALIZED_UUID_{}__", *next_marker);
                 *next_marker += 1;
-                if !existing_strings.contains(&candidate.as_str()) && !markers.contains_key(&candidate)
+                if !existing_strings.contains(&candidate.as_str())
+                    && !markers.contains_key(&candidate)
                 {
                     break candidate;
                 }
