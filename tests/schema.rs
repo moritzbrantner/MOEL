@@ -231,10 +231,7 @@ tags? = ["string"]
     let Schema::Table(root) = &schema else {
         panic!("schema root must be a table")
     };
-    assert_eq!(
-        root["nickname"],
-        Schema::Optional(Box::new(Schema::String))
-    );
+    assert_eq!(root["nickname"], Schema::Optional(Box::new(Schema::String)));
     assert!(matches!(root["status"], Schema::Optional(_)));
     assert!(matches!(root["tags"], Schema::Optional(_)));
 
