@@ -163,8 +163,8 @@ fn rewrite_uuid_literals(source: &str, salt: u32) -> Result<RewrittenSource, Err
                     };
                     let body_end = body_start + relative_end;
                     let body = &source[body_start..body_end];
-                    let uuid = Uuid::parse_str(body)
-                        .map_err(|_| Error::InvalidUuid(body.to_owned()))?;
+                    let uuid =
+                        Uuid::parse_str(body).map_err(|_| Error::InvalidUuid(body.to_owned()))?;
                     let marker = format!("__MOEL_UUID_{salt}_{marker_index}__");
                     marker_index += 1;
                     output.push('"');
@@ -292,9 +292,12 @@ fn from_toml(value: toml::Value, uuids: &BTreeMap<String, Uuid>) -> Value {
                 Value::TomlDatetime(rendered)
             }
         }
-        toml::Value::Array(values) => {
-            Value::Array(values.into_iter().map(|value| from_toml(value, uuids)).collect())
-        }
+        toml::Value::Array(values) => Value::Array(
+            values
+                .into_iter()
+                .map(|value| from_toml(value, uuids))
+                .collect(),
+        ),
         toml::Value::Table(values) => Value::Table(
             values
                 .into_iter()
@@ -333,12 +336,7 @@ fn to_toml(
 ) -> Result<(toml::Value, BTreeMap<String, Uuid>), Error> {
     let mut markers = BTreeMap::new();
     let mut next_marker = 0_u32;
-    let toml_value = to_toml_inner(
-        value,
-        existing_strings,
-        &mut markers,
-        &mut next_marker,
-    )?;
+    let toml_value = to_toml_inner(value, existing_strings, &mut markers, &mut next_marker)?;
     Ok((toml_value, markers))
 }
 
@@ -358,7 +356,9 @@ fn to_toml_inner(
             let marker = loop {
                 let candidate = format!("__MOEL_SERIALIZED_UUID_{}__", *next_marker);
                 *next_marker += 1;
-                if !existing_strings.iter().any(|value| **value == candidate)
+                if !existing_strings
+                    .iter()
+                    .any(|value| *value == candidate.as_str())
                     && !markers.contains_key(&candidate)
                 {
                     break candidate;
