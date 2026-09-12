@@ -204,9 +204,10 @@ fn rewrite_uuid_literals(source: &str, salt: u32) -> Result<RewrittenSource, Err
                 }
             }
             LexState::MultilineBasicString => {
-                if source[i..].starts_with("\"\"\"") {
-                    output.push_str("\"\"\"");
-                    i += 3;
+                let quote_run = repeated_ascii_char_len(source, i, '"');
+                if quote_run >= 3 {
+                    output.push_str(&source[i..i + quote_run]);
+                    i += quote_run;
                     state = LexState::Normal;
                 } else {
                     let ch = next_char(source, i);
@@ -218,9 +219,10 @@ fn rewrite_uuid_literals(source: &str, salt: u32) -> Result<RewrittenSource, Err
                 }
             }
             LexState::MultilineLiteralString => {
-                if source[i..].starts_with("'''") {
-                    output.push_str("'''");
-                    i += 3;
+                let quote_run = repeated_ascii_char_len(source, i, '\'');
+                if quote_run >= 3 {
+                    output.push_str(&source[i..i + quote_run]);
+                    i += quote_run;
                     state = LexState::Normal;
                 } else {
                     push_next_char(source, &mut output, &mut i);
@@ -241,6 +243,13 @@ fn is_value_boundary(source: &str, index: usize) -> bool {
         .rev()
         .find(|ch| !ch.is_whitespace())
         .is_some_and(|ch| matches!(ch, '=' | '[' | ','))
+}
+
+fn repeated_ascii_char_len(source: &str, index: usize, target: char) -> usize {
+    source[index..]
+        .bytes()
+        .take_while(|byte| *byte == target as u8)
+        .count()
 }
 
 fn next_char(source: &str, index: usize) -> char {
