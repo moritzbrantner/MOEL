@@ -1,3 +1,5 @@
+pub mod schema;
+
 use std::collections::BTreeMap;
 use std::fmt;
 
