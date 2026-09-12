@@ -30,21 +30,10 @@ pub enum Schema {
 pub enum SchemaError {
     Parse(ParseError),
     RootMustBeTable,
-    UnknownType {
-        path: String,
-        name: String,
-    },
-    EmptyArray {
-        path: String,
-    },
-    ArrayMustHaveSingleElement {
-        path: String,
-        actual: usize,
-    },
-    InvalidSchemaValue {
-        path: String,
-        actual: &'static str,
-    },
+    UnknownType { path: String, name: String },
+    EmptyArray { path: String },
+    ArrayMustHaveSingleElement { path: String, actual: usize },
+    InvalidSchemaValue { path: String, actual: &'static str },
 }
 
 impl fmt::Display for SchemaError {
@@ -95,12 +84,12 @@ impl fmt::Display for Diagnostic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
             DiagnosticKind::MissingField => write!(f, "{}: required field is missing", self.path),
-            DiagnosticKind::UnexpectedField => write!(f, "{}: field is not declared by schema", self.path),
-            DiagnosticKind::TypeMismatch { expected, actual } => write!(
-                f,
-                "{}: expected {expected}, found {actual}",
-                self.path
-            ),
+            DiagnosticKind::UnexpectedField => {
+                write!(f, "{}: field is not declared by schema", self.path)
+            }
+            DiagnosticKind::TypeMismatch { expected, actual } => {
+                write!(f, "{}: expected {expected}, found {actual}", self.path)
+            }
         }
     }
 }
@@ -209,10 +198,7 @@ pub fn schema_path_for(document_path: impl AsRef<Path>) -> Option<PathBuf> {
     )
 }
 
-fn schema_from_table(
-    values: BTreeMap<String, Value>,
-    path: String,
-) -> Result<Schema, SchemaError> {
+fn schema_from_table(values: BTreeMap<String, Value>, path: String) -> Result<Schema, SchemaError> {
     let fields = values
         .into_iter()
         .map(|(key, value)| {
@@ -265,9 +251,27 @@ fn scalar_schema(name: &str) -> Option<Schema> {
 fn validate_at(value: &Value, schema: &Schema, path: &str, diagnostics: &mut Vec<Diagnostic>) {
     match schema {
         Schema::Any => {}
-        Schema::String => require_type(value, matches!(value, Value::String(_)), "string", path, diagnostics),
-        Schema::Integer => require_type(value, matches!(value, Value::Integer(_)), "integer", path, diagnostics),
-        Schema::Float => require_type(value, matches!(value, Value::Float(_)), "float", path, diagnostics),
+        Schema::String => require_type(
+            value,
+            matches!(value, Value::String(_)),
+            "string",
+            path,
+            diagnostics,
+        ),
+        Schema::Integer => require_type(
+            value,
+            matches!(value, Value::Integer(_)),
+            "integer",
+            path,
+            diagnostics,
+        ),
+        Schema::Float => require_type(
+            value,
+            matches!(value, Value::Float(_)),
+            "float",
+            path,
+            diagnostics,
+        ),
         Schema::Number => require_type(
             value,
             matches!(value, Value::Integer(_) | Value::Float(_)),
@@ -275,9 +279,27 @@ fn validate_at(value: &Value, schema: &Schema, path: &str, diagnostics: &mut Vec
             path,
             diagnostics,
         ),
-        Schema::Boolean => require_type(value, matches!(value, Value::Boolean(_)), "boolean", path, diagnostics),
-        Schema::Uuid => require_type(value, matches!(value, Value::Uuid(_)), "uuid", path, diagnostics),
-        Schema::Utc => require_type(value, matches!(value, Value::UtcTimestamp(_)), "utc", path, diagnostics),
+        Schema::Boolean => require_type(
+            value,
+            matches!(value, Value::Boolean(_)),
+            "boolean",
+            path,
+            diagnostics,
+        ),
+        Schema::Uuid => require_type(
+            value,
+            matches!(value, Value::Uuid(_)),
+            "uuid",
+            path,
+            diagnostics,
+        ),
+        Schema::Utc => require_type(
+            value,
+            matches!(value, Value::UtcTimestamp(_)),
+            "utc",
+            path,
+            diagnostics,
+        ),
         Schema::Datetime => require_type(
             value,
             matches!(value, Value::UtcTimestamp(_) | Value::TomlDatetime(_)),
