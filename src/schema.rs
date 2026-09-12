@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -10,10 +10,10 @@ pub const SCHEMA_FILE_NAME: &str = "schema.moel";
 ///
 /// Schemas deliberately reuse MOEL values instead of introducing a second
 /// parser or schema language. Tables describe table shapes, one-element arrays
-/// describe homogeneous arrays, and strings name scalar types.
+/// describe homogeneous arrays, strings name scalar types, and enum declarations
+/// constrain strings to an explicit set of values.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Schema {
-    Any,
     String,
     Integer,
     Float,
@@ -22,6 +22,7 @@ pub enum Schema {
     Uuid,
     Utc,
     Datetime,
+    Enum(Vec<String>),
     Array(Box<Schema>),
     Table(BTreeMap<String, Schema>),
 }
@@ -33,6 +34,14 @@ pub enum SchemaError {
     UnknownType { path: String, name: String },
     EmptyArray { path: String },
     ArrayMustHaveSingleElement { path: String, actual: usize },
+    EmptyEnum { path: String },
+    EnumMustBeArray { path: String, actual: &'static str },
+    EnumValueMustBeString {
+        path: String,
+        index: usize,
+        actual: &'static str,
+    },
+    DuplicateEnumValue { path: String, value: String },
     InvalidSchemaValue { path: String, actual: &'static str },
 }
 
@@ -51,9 +60,27 @@ impl fmt::Display for SchemaError {
                 f,
                 "schema array at {path} must contain exactly one item schema, found {actual}"
             ),
+            Self::EmptyEnum { path } => {
+                write!(f, "enum declaration at {path} must contain at least one value")
+            }
+            Self::EnumMustBeArray { path, actual } => write!(
+                f,
+                "enum declaration at {path} must use an array of strings, found {actual}"
+            ),
+            Self::EnumValueMustBeString {
+                path,
+                index,
+                actual,
+            } => write!(
+                f,
+                "enum declaration at {path} has non-string value at index {index}: found {actual}"
+            ),
+            Self::DuplicateEnumValue { path, value } => {
+                write!(f, "enum declaration at {path} contains duplicate value {value:?}")
+            }
             Self::InvalidSchemaValue { path, actual } => write!(
                 f,
-                "invalid schema value at {path}: expected a type name, table, or one-element array, found {actual}"
+                "invalid schema value at {path}: expected a type name, enum declaration, table, or one-element array, found {actual}"
             ),
         }
     }
@@ -90,6 +117,11 @@ impl fmt::Display for Diagnostic {
             DiagnosticKind::TypeMismatch { expected, actual } => {
                 write!(f, "{}: expected {expected}, found {actual}", self.path)
             }
+            DiagnosticKind::InvalidEnumValue { allowed, actual } => write!(
+                f,
+                "{}: expected one of {allowed:?}, found {actual:?}",
+                self.path
+            ),
         }
     }
 }
@@ -101,6 +133,10 @@ pub enum DiagnosticKind {
     TypeMismatch {
         expected: &'static str,
         actual: &'static str,
+    },
+    InvalidEnumValue {
+        allowed: Vec<String>,
+        actual: String,
     },
 }
 
@@ -141,7 +177,8 @@ impl std::error::Error for ValidatedDocumentError {
 ///
 /// The schema root is always a table. Leaf strings name types. A one-element
 /// array contains the schema for every array item. Nested tables describe nested
-/// document tables.
+/// document tables. A table of the form `{ enum = ["a", "b"] }` declares a
+/// string enum.
 pub fn parse_schema(source: &str) -> Result<Schema, SchemaError> {
     let value = parse(source)?;
     let Value::Table(values) = value else {
@@ -225,6 +262,7 @@ fn schema_from_value(value: Value, path: String) -> Result<Schema, SchemaError> 
                 format!("{path}[0]"),
             )?)))
         }
+        Value::Table(values) if is_enum_declaration(&values) => enum_schema(values, path),
         Value::Table(values) => schema_from_table(values, path),
         other => Err(SchemaError::InvalidSchemaValue {
             path,
@@ -235,7 +273,6 @@ fn schema_from_value(value: Value, path: String) -> Result<Schema, SchemaError> 
 
 fn scalar_schema(name: &str) -> Option<Schema> {
     Some(match name {
-        "any" => Schema::Any,
         "string" => Schema::String,
         "integer" => Schema::Integer,
         "float" => Schema::Float,
@@ -248,9 +285,45 @@ fn scalar_schema(name: &str) -> Option<Schema> {
     })
 }
 
+fn is_enum_declaration(values: &BTreeMap<String, Value>) -> bool {
+    values.len() == 1 && values.contains_key("enum")
+}
+
+fn enum_schema(mut values: BTreeMap<String, Value>, path: String) -> Result<Schema, SchemaError> {
+    let enum_value = values.remove("enum").expect("enum declaration checked");
+    let Value::Array(values) = enum_value else {
+        return Err(SchemaError::EnumMustBeArray {
+            path,
+            actual: value_kind(&enum_value),
+        });
+    };
+
+    if values.is_empty() {
+        return Err(SchemaError::EmptyEnum { path });
+    }
+
+    let mut seen = BTreeSet::new();
+    let mut allowed = Vec::with_capacity(values.len());
+    for (index, value) in values.into_iter().enumerate() {
+        let Value::String(value) = value else {
+            return Err(SchemaError::EnumValueMustBeString {
+                path,
+                index,
+                actual: value_kind(&value),
+            });
+        };
+
+        if !seen.insert(value.clone()) {
+            return Err(SchemaError::DuplicateEnumValue { path, value });
+        }
+        allowed.push(value);
+    }
+
+    Ok(Schema::Enum(allowed))
+}
+
 fn validate_at(value: &Value, schema: &Schema, path: &str, diagnostics: &mut Vec<Diagnostic>) {
     match schema {
-        Schema::Any => {}
         Schema::String => require_type(
             value,
             matches!(value, Value::String(_)),
@@ -307,6 +380,7 @@ fn validate_at(value: &Value, schema: &Schema, path: &str, diagnostics: &mut Vec
             path,
             diagnostics,
         ),
+        Schema::Enum(allowed) => validate_enum(value, allowed, path, diagnostics),
         Schema::Array(item_schema) => {
             let Value::Array(values) = value else {
                 type_mismatch(value, "array", path, diagnostics);
@@ -343,6 +417,28 @@ fn validate_at(value: &Value, schema: &Schema, path: &str, diagnostics: &mut Vec
                 }
             }
         }
+    }
+}
+
+fn validate_enum(
+    value: &Value,
+    allowed: &[String],
+    path: &str,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let Value::String(actual) = value else {
+        type_mismatch(value, "enum", path, diagnostics);
+        return;
+    };
+
+    if !allowed.contains(actual) {
+        diagnostics.push(Diagnostic {
+            path: path.to_owned(),
+            kind: DiagnosticKind::InvalidEnumValue {
+                allowed: allowed.to_vec(),
+                actual: actual.clone(),
+            },
+        });
     }
 }
 
