@@ -117,6 +117,7 @@ fn rewrite_uuid_literals(source: &str, salt: u32) -> Result<RewrittenSource, Err
     let mut output = String::with_capacity(source.len());
     let mut uuids = BTreeMap::new();
     let mut state = LexState::Normal;
+    let mut expects_value = false;
     let mut i = 0;
     let mut marker_index = 0_u32;
 
@@ -131,6 +132,7 @@ fn rewrite_uuid_literals(source: &str, salt: u32) -> Result<RewrittenSource, Err
                 }
 
                 if source[i..].starts_with("\"\"\"") {
+                    expects_value = false;
                     output.push_str("\"\"\"");
                     i += 3;
                     state = LexState::MultilineBasicString;
@@ -138,6 +140,7 @@ fn rewrite_uuid_literals(source: &str, salt: u32) -> Result<RewrittenSource, Err
                 }
 
                 if source[i..].starts_with("'''") {
+                    expects_value = false;
                     output.push_str("'''");
                     i += 3;
                     state = LexState::MultilineLiteralString;
@@ -145,6 +148,7 @@ fn rewrite_uuid_literals(source: &str, salt: u32) -> Result<RewrittenSource, Err
                 }
 
                 if source[i..].starts_with('"') {
+                    expects_value = false;
                     output.push('"');
                     i += 1;
                     state = LexState::BasicString;
@@ -152,13 +156,14 @@ fn rewrite_uuid_literals(source: &str, salt: u32) -> Result<RewrittenSource, Err
                 }
 
                 if source[i..].starts_with('\'') {
+                    expects_value = false;
                     output.push('\'');
                     i += 1;
                     state = LexState::LiteralString;
                     continue;
                 }
 
-                if source[i..].starts_with("uuid\"") && is_value_boundary(source, i) {
+                if source[i..].starts_with("uuid\"") && expects_value {
                     let body_start = i + 5;
                     let Some(relative_end) = source[body_start..].find('"') else {
                         return Err(Error::UnterminatedUuidLiteral);
@@ -173,11 +178,21 @@ fn rewrite_uuid_literals(source: &str, salt: u32) -> Result<RewrittenSource, Err
                     output.push_str(&marker);
                     output.push('"');
                     uuids.insert(marker, uuid);
+                    expects_value = false;
                     i = body_end + 1;
                     continue;
                 }
 
-                push_next_char(source, &mut output, &mut i);
+                let ch = next_char(source, i);
+                output.push(ch);
+                i += ch.len_utf8();
+                if !ch.is_whitespace() {
+                    expects_value = match ch {
+                        '=' | ',' => true,
+                        '[' => expects_value,
+                        _ => false,
+                    };
+                }
             }
             LexState::Comment => {
                 let ch = next_char(source, i);
@@ -237,14 +252,6 @@ fn rewrite_uuid_literals(source: &str, salt: u32) -> Result<RewrittenSource, Err
         source: output,
         uuids,
     })
-}
-
-fn is_value_boundary(source: &str, index: usize) -> bool {
-    source[..index]
-        .chars()
-        .rev()
-        .find(|ch| !ch.is_whitespace())
-        .is_some_and(|ch| matches!(ch, '=' | '[' | ','))
 }
 
 fn repeated_ascii_char_len(source: &str, index: usize, target: char) -> usize {
