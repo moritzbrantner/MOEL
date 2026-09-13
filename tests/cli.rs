@@ -135,7 +135,7 @@ fn check_reports_validation_failures_with_diagnostics() {
 
     assert_eq!(output.status.code(), Some(5));
     assert!(stderr(&output).contains("failed schema validation"));
-    assert!(stderr(&output).contains("$.count: expected integer, found string"));
+    assert!(stderr(&output).contains("$[\"count\"]: expected integer, found string"));
 }
 
 #[test]
