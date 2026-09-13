@@ -117,7 +117,7 @@ pub fn validation_span(
 
 fn document_span_for_path(source: &str, path: &str) -> Option<SourceSpan> {
     let masked = mask_uuid_literals(source);
-    let document = masked.parse::<toml_edit::DocumentMut>().ok()?;
+    let document = toml_edit::Document::parse(masked.as_str()).ok()?;
     let mut spans = BTreeMap::new();
     collect_item(document.as_item(), "$", &BTreeMap::new(), None, &mut spans);
     SourceSpan::from_range(source, spans.get(path)?.clone())
@@ -126,7 +126,7 @@ fn document_span_for_path(source: &str, path: &str) -> Option<SourceSpan> {
 fn schema_span_for_path(source: &str, path: &str) -> Option<SourceSpan> {
     let rewritten = rewrite_optional_keys(source);
     let masked = mask_uuid_literals(&rewritten.source);
-    let document = masked.parse::<toml_edit::DocumentMut>().ok()?;
+    let document = toml_edit::Document::parse(masked.as_str()).ok()?;
     let mut spans = BTreeMap::new();
     collect_item(
         document.as_item(),
