@@ -4,8 +4,8 @@ use std::ops::Range;
 
 use toml_edit::{Item, Table, Value as EditValue};
 
-use crate::schema::{Diagnostic, DiagnosticKind, SchemaError};
 use crate::Error;
+use crate::schema::{Diagnostic, DiagnosticKind, SchemaError};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SourceSpan {
@@ -68,10 +68,9 @@ pub fn parse_error_span(source: &str, error: &Error) -> Option<SourceSpan> {
 pub fn schema_error_span(source: &str, error: &SchemaError) -> Option<SourceSpan> {
     if let SchemaError::Parse(parse_error) = error {
         return match parse_error {
-            Error::InvalidUuid(value) => SourceSpan::from_range(
-                source,
-                locate_uuid_error(source, Some(value))?,
-            ),
+            Error::InvalidUuid(value) => {
+                SourceSpan::from_range(source, locate_uuid_error(source, Some(value))?)
+            }
             Error::UnterminatedUuidLiteral => {
                 SourceSpan::from_range(source, locate_uuid_error(source, None)?)
             }
@@ -120,7 +119,13 @@ fn document_span_for_path(source: &str, path: &str) -> Option<SourceSpan> {
     let masked = mask_uuid_literals(source);
     let document = masked.parse::<toml_edit::DocumentMut>().ok()?;
     let mut spans = BTreeMap::new();
-    collect_item(document.as_item(), "$", &BTreeMap::new(), None, &mut spans);
+    collect_item(
+        document.as_item(),
+        "$",
+        &BTreeMap::new(),
+        None,
+        &mut spans,
+    );
     SourceSpan::from_range(source, spans.get(path)?.clone())
 }
 
@@ -229,10 +234,7 @@ fn record_span(
     spans.insert(path.to_owned(), span);
 }
 
-fn normalize_key<'a>(
-    key: &'a str,
-    optional_fields: &'a BTreeMap<String, String>,
-) -> Cow<'a, str> {
+fn normalize_key<'a>(key: &'a str, optional_fields: &'a BTreeMap<String, String>) -> Cow<'a, str> {
     optional_fields
         .get(key)
         .map(|key| Cow::Owned(key.clone()))
