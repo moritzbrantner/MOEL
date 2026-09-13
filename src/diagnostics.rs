@@ -119,13 +119,7 @@ fn document_span_for_path(source: &str, path: &str) -> Option<SourceSpan> {
     let masked = mask_uuid_literals(source);
     let document = masked.parse::<toml_edit::DocumentMut>().ok()?;
     let mut spans = BTreeMap::new();
-    collect_item(
-        document.as_item(),
-        "$",
-        &BTreeMap::new(),
-        None,
-        &mut spans,
-    );
+    collect_item(document.as_item(), "$", &BTreeMap::new(), None, &mut spans);
     SourceSpan::from_range(source, spans.get(path)?.clone())
 }
 
