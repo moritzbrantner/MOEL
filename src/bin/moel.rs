@@ -77,7 +77,7 @@ fn check(document_path: &Path) -> Result<String, CliError> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum FileKind {
     Document,
     Schema,
