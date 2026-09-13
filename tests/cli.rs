@@ -78,6 +78,27 @@ fn check_loads_only_the_sibling_schema() {
     assert!(stdout(&output).contains("valid MOEL (no schema.moel)"));
 }
 
+#[cfg(unix)]
+#[test]
+fn check_rejects_a_dangling_sibling_schema() {
+    use std::os::unix::fs::symlink;
+
+    let dir = TempDir::new("dangling-schema");
+    let document = dir.path().join("config.moel");
+    write(&document, "name = \"MOEL\"\n");
+    symlink(
+        dir.path().join("missing-schema-target.moel"),
+        dir.path().join("schema.moel"),
+    )
+    .expect("dangling schema symlink must be creatable");
+
+    let output = check(&document);
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(stderr(&output).contains("schema.moel"));
+    assert!(stderr(&output).contains("could not read schema"));
+}
+
 #[test]
 fn check_validates_against_the_sibling_schema() {
     let dir = TempDir::new("valid-schema");
