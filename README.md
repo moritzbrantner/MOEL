@@ -50,4 +50,8 @@ cargo run --bin moel -- check path/to/config.moel
 
 Successful schema-less files therefore remain valid without additional setup. Failures have stable categories for scripting: exit code `2` for usage or file I/O, `3` for document parse errors, `4` for schema parse errors, and `5` for schema-validation failures.
 
+Parse, schema, and validation failures include the source file, 1-based line and column, and byte span when the offending syntax or value can be mapped deterministically. Validation mismatches point at the document value; missing required fields point at the corresponding `schema.moel` declaration. Source locations are diagnostic metadata only and do not participate in MOEL acceptance or schema-validation semantics.
+
+The library exposes the same source-location helpers through `moel::diagnostics` for consumers that want to render their own diagnostics.
+
 The implementation is a Rust library and CLI parser core. See `docs/language.md` for the language and schema contract.
