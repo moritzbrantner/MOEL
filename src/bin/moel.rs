@@ -6,6 +6,9 @@ use std::io::ErrorKind;
 use std::path::Path;
 use std::process::ExitCode;
 
+use moel::diagnostics::{
+    DiagnosticSource, SourceSpan, parse_error_span, schema_error_span, validation_span,
+};
 use moel::parse;
 use moel::schema::{parse_schema, schema_path_for, validate};
 
@@ -37,9 +40,12 @@ fn run(args: impl IntoIterator<Item = OsString>) -> Result<String, CliError> {
 
 fn check(document_path: &Path) -> Result<String, CliError> {
     let document_source = read(document_path, FileKind::Document)?;
-    let document = parse(&document_source).map_err(|error| CliError::DocumentParse {
-        path: document_path.display().to_string(),
-        message: error.to_string(),
+    let document = parse(&document_source).map_err(|error| {
+        let span = parse_error_span(&document_source, &error);
+        CliError::DocumentParse {
+            location: format_location(document_path, span.as_ref()),
+            message: error.to_string(),
+        }
     })?;
 
     let Some(schema_path) = schema_path_for(document_path) else {
@@ -64,9 +70,12 @@ fn check(document_path: &Path) -> Result<String, CliError> {
     }
 
     let schema_source = read(&schema_path, FileKind::Schema)?;
-    let schema = parse_schema(&schema_source).map_err(|error| CliError::SchemaParse {
-        path: schema_path.display().to_string(),
-        message: error.to_string(),
+    let schema = parse_schema(&schema_source).map_err(|error| {
+        let span = schema_error_span(&schema_source, &error);
+        CliError::SchemaParse {
+            location: format_location(&schema_path, span.as_ref()),
+            message: error.to_string(),
+        }
     })?;
     let diagnostics = validate(&document, &schema);
 
@@ -77,14 +86,45 @@ fn check(document_path: &Path) -> Result<String, CliError> {
             schema_path.display()
         ))
     } else {
+        let diagnostics = diagnostics
+            .into_iter()
+            .map(|diagnostic| {
+                let location = validation_span(&document_source, &schema_source, &diagnostic);
+                match location {
+                    Some(location) => {
+                        let path = match location.source {
+                            DiagnosticSource::Document => document_path,
+                            DiagnosticSource::Schema => &schema_path,
+                        };
+                        format!(
+                            "{}: {diagnostic}",
+                            format_location(path, Some(&location.span))
+                        )
+                    }
+                    None => diagnostic.to_string(),
+                }
+            })
+            .collect();
+
         Err(CliError::Validation {
             document_path: document_path.display().to_string(),
             schema_path: schema_path.display().to_string(),
-            diagnostics: diagnostics
-                .into_iter()
-                .map(|diagnostic| diagnostic.to_string())
-                .collect(),
+            diagnostics,
         })
+    }
+}
+
+fn format_location(path: &Path, span: Option<&SourceSpan>) -> String {
+    match span {
+        Some(span) => format!(
+            "{}:{}:{} [bytes {}..{}]",
+            path.display(),
+            span.line,
+            span.column,
+            span.start,
+            span.end
+        ),
+        None => path.display().to_string(),
     }
 }
 
@@ -120,11 +160,11 @@ enum CliError {
         message: String,
     },
     DocumentParse {
-        path: String,
+        location: String,
         message: String,
     },
     SchemaParse {
-        path: String,
+        location: String,
         message: String,
     },
     Validation {
@@ -154,10 +194,10 @@ impl fmt::Display for CliError {
                 kind,
                 message,
             } => write!(f, "{path}: could not read {kind}: {message}"),
-            Self::DocumentParse { path, message } => {
-                write!(f, "{path}: document parse error: {message}")
+            Self::DocumentParse { location, message } => {
+                write!(f, "{location}: document parse error: {message}")
             }
-            Self::SchemaParse { path, message } => write!(f, "{path}: {message}"),
+            Self::SchemaParse { location, message } => write!(f, "{location}: {message}"),
             Self::Validation {
                 document_path,
                 schema_path,

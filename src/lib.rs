@@ -1,3 +1,4 @@
+pub mod diagnostics;
 pub mod schema;
 
 use std::collections::BTreeMap;
