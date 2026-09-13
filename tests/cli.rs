@@ -11,10 +11,8 @@ impl TempDir {
             .duration_since(UNIX_EPOCH)
             .expect("system time must be after Unix epoch")
             .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "moel-cli-{label}-{}-{nanos}",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("moel-cli-{label}-{}-{nanos}", std::process::id()));
         fs::create_dir_all(&path).expect("temporary test directory must be creatable");
         Self(path)
     }
