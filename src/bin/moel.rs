@@ -46,7 +46,7 @@ fn check(document_path: &Path) -> Result<String, CliError> {
         return Ok(format!("{}: valid MOEL", document_path.display()));
     };
 
-    match fs::metadata(&schema_path) {
+    match fs::symlink_metadata(&schema_path) {
         Ok(_) => {}
         Err(error) if error.kind() == ErrorKind::NotFound => {
             return Ok(format!(
