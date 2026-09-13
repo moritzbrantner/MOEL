@@ -1,7 +1,8 @@
 use std::env;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::fs;
+use std::io::ErrorKind;
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -29,7 +30,7 @@ fn main() -> ExitCode {
 fn run(args: impl IntoIterator<Item = OsString>) -> Result<String, CliError> {
     let args = args.into_iter().collect::<Vec<_>>();
     match args.as_slice() {
-        [command, path] if command == "check" => check(Path::new(path)),
+        [command, path] if command == OsStr::new("check") => check(Path::new(path)),
         _ => Err(CliError::Usage),
     }
 }
@@ -45,11 +46,21 @@ fn check(document_path: &Path) -> Result<String, CliError> {
         return Ok(format!("{}: valid MOEL", document_path.display()));
     };
 
-    if !schema_path.exists() {
-        return Ok(format!(
-            "{}: valid MOEL (no schema.moel)",
-            document_path.display()
-        ));
+    match fs::metadata(&schema_path) {
+        Ok(_) => {}
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            return Ok(format!(
+                "{}: valid MOEL (no schema.moel)",
+                document_path.display()
+            ));
+        }
+        Err(error) => {
+            return Err(CliError::Io {
+                path: schema_path.display().to_string(),
+                kind: FileKind::Schema,
+                message: error.to_string(),
+            });
+        }
     }
 
     let schema_source = read(&schema_path, FileKind::Schema)?;
