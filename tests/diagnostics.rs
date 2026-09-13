@@ -1,6 +1,6 @@
 use moel::diagnostics::{DiagnosticSource, parse_error_span, schema_error_span, validation_span};
-use moel::schema::{parse_schema, validate};
 use moel::parse;
+use moel::schema::{parse_schema, validate};
 
 #[test]
 fn invalid_uuid_span_points_to_the_explicit_literal() {
