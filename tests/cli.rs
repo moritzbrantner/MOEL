@@ -126,10 +126,12 @@ fn check_reports_document_parse_failures_separately() {
     write(&document, "id = uuid\"not-a-uuid\"\n");
 
     let output = check(&document);
+    let stderr = stderr(&output);
 
     assert_eq!(output.status.code(), Some(3));
-    assert!(stderr(&output).contains("document parse error"));
-    assert!(stderr(&output).contains("invalid UUID literal"));
+    assert!(stderr.contains("config.moel:1:6 [bytes"));
+    assert!(stderr.contains("document parse error"));
+    assert!(stderr.contains("invalid UUID literal"));
 }
 
 #[test]
@@ -140,9 +142,11 @@ fn check_reports_schema_parse_failures_separately() {
     write(dir.path().join("schema.moel"), "name = \"any\"\n");
 
     let output = check(&document);
+    let stderr = stderr(&output);
 
     assert_eq!(output.status.code(), Some(4));
-    assert!(stderr(&output).contains("unknown schema type"));
+    assert!(stderr.contains("schema.moel:1:8 [bytes"));
+    assert!(stderr.contains("unknown schema type"));
 }
 
 #[test]
@@ -153,10 +157,30 @@ fn check_reports_validation_failures_with_diagnostics() {
     write(dir.path().join("schema.moel"), "count = \"integer\"\n");
 
     let output = check(&document);
+    let stderr = stderr(&output);
 
     assert_eq!(output.status.code(), Some(5));
-    assert!(stderr(&output).contains("failed schema validation"));
-    assert!(stderr(&output).contains("$[\"count\"]: expected integer, found string"));
+    assert!(stderr.contains("failed schema validation"));
+    assert!(stderr.contains("config.moel:1:9 [bytes"));
+    assert!(stderr.contains("$[\"count\"]: expected integer, found string"));
+}
+
+#[test]
+fn missing_required_field_reports_the_schema_location() {
+    let dir = TempDir::new("missing-field-location");
+    let document = dir.path().join("config.moel");
+    write(&document, "name = \"MOEL\"\n");
+    write(
+        dir.path().join("schema.moel"),
+        "name = \"string\"\ncount = \"integer\"\n",
+    );
+
+    let output = check(&document);
+    let stderr = stderr(&output);
+
+    assert_eq!(output.status.code(), Some(5));
+    assert!(stderr.contains("schema.moel:2:9 [bytes"));
+    assert!(stderr.contains("$[\"count\"]: required field is missing"));
 }
 
 #[test]
