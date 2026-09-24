@@ -138,13 +138,26 @@ Schema parsing and document parsing are distinct from validation. Implementation
 
 A consumer that wants schema support resolves the sibling `schema.moel`, checks whether it exists, loads it, and validates. A consumer that does not opt into schema discovery can continue parsing ordinary TOML or MOEL exactly as before.
 
-## 5. Determinism
+## 5. Typed Rust deserialization
+
+The Rust implementation may deserialize a parsed MOEL value tree directly into Serde-owned application types. This is a projection of the existing semantic model, not a second parser and not an implicit schema-validation step.
+
+Typed deserialization must preserve MOEL-only distinctions rather than recreating string conventions:
+
+- an ordinary string that happens to look like a UUID must not deserialize as the explicit MOEL UUID type;
+- an explicit MOEL UUID must not silently deserialize as an ordinary string;
+- a non-zero-offset or local TOML date/time value must not deserialize as the explicit UTC timestamp type;
+- typed-data errors should retain deterministic semantic paths and source spans when Serde retains a concrete value path; some failed flattened-field deserializations are reported by Serde at the document root after buffering.
+
+The Rust API exposes `MoelUuid`, `UtcTimestamp`, and `TomlDatetime` wrappers for these semantic values. `from_str` has the same schema-free parsing boundary as `parse`; consumers that require `schema.moel` validation still opt into schema discovery and validation separately.
+
+## 6. Determinism
 
 Parsing and canonical serialization must be deterministic. Canonical serialization is semantic, not source-preserving: comments and original formatting are not part of the value tree.
 
 Schema validation is also deterministic. Table traversal and diagnostic ordering must not depend on hash iteration order.
 
-## 6. Compatibility tests
+## 7. Compatibility tests
 
 The implementation should continuously test these boundaries:
 
@@ -157,4 +170,6 @@ The implementation should continuously test these boundaries:
 7. optional-field syntax changes presence only and still validates present values;
 8. quoted question-mark keys remain literal keys;
 9. normalized duplicate required/optional declarations fail closed;
-10. malformed schemas fail closed rather than silently weakening validation.
+10. malformed schemas fail closed rather than silently weakening validation;
+11. typed deserialization never promotes UUID-looking strings to UUIDs or non-UTC date/times to UTC;
+12. typed-data failures retain deterministic value paths and source spans when available.
