@@ -20,11 +20,11 @@ const TOML_DATETIME_NEWTYPE: &str = "MOEL::TomlDatetime";
 /// A UUID that can only be deserialized from MOEL's explicit UUID primitive.
 ///
 /// This wrapper deliberately does not accept an ordinary string that merely looks
-/// like a UUID. Use Uuid::into_inner when an API requires uuid::Uuid.
+/// like a UUID. Use MoelUuid::into_inner when an API requires uuid::Uuid.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Uuid(RawUuid);
+pub struct MoelUuid(RawUuid);
 
-impl Uuid {
+impl MoelUuid {
     pub fn as_inner(&self) -> &RawUuid {
         &self.0
     }
@@ -34,31 +34,31 @@ impl Uuid {
     }
 }
 
-impl fmt::Display for Uuid {
+impl fmt::Display for MoelUuid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }
 }
 
-impl From<RawUuid> for Uuid {
+impl From<RawUuid> for MoelUuid {
     fn from(value: RawUuid) -> Self {
         Self(value)
     }
 }
 
-impl From<Uuid> for RawUuid {
-    fn from(value: Uuid) -> Self {
+impl From<MoelUuid> for RawUuid {
+    fn from(value: MoelUuid) -> Self {
         value.0
     }
 }
 
-impl AsRef<RawUuid> for Uuid {
+impl AsRef<RawUuid> for MoelUuid {
     fn as_ref(&self) -> &RawUuid {
         &self.0
     }
 }
 
-impl<'de> Deserialize<'de> for Uuid {
+impl<'de> Deserialize<'de> for MoelUuid {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: de::Deserializer<'de>,
@@ -66,7 +66,7 @@ impl<'de> Deserialize<'de> for Uuid {
         struct UuidVisitor;
 
         impl<'de> Visitor<'de> for UuidVisitor {
-            type Value = Uuid;
+            type Value = MoelUuid;
 
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
                 formatter.write_str("an explicit MOEL UUID")
@@ -78,7 +78,7 @@ impl<'de> Deserialize<'de> for Uuid {
             {
                 let value = String::deserialize(deserializer)?;
                 RawUuid::parse_str(&value)
-                    .map(Uuid)
+                    .map(MoelUuid)
                     .map_err(de::Error::custom)
             }
         }
@@ -253,7 +253,7 @@ impl std::error::Error for DeserializeError {
 /// Parse a MOEL document and deserialize it directly into an owned Rust value.
 ///
 /// This never discovers or loads schema.moel; it has the same parsing boundary
-/// as crate::parse. Use Uuid, UtcTimestamp, and TomlDatetime when the
+/// as crate::parse. Use MoelUuid, UtcTimestamp, and TomlDatetime when the
 /// corresponding MOEL semantic distinctions must remain explicit.
 pub fn from_str<T>(source: &str) -> Result<T, DeserializeError>
 where
@@ -376,7 +376,7 @@ impl<'de> de::Deserializer<'de> for ValueDeserializer {
             Value::Boolean(value) => visitor.visit_bool(value),
             Value::Array(values) => visitor.visit_seq(SeqDeserializer::new(values)),
             Value::Table(values) => visitor.visit_map(MapDeserializer::new(values)),
-            value @ Value::Uuid(_) => Err(ValueError::type_mismatch("an explicit moel::Uuid", &value)),
+            value @ Value::Uuid(_) => Err(ValueError::type_mismatch("an explicit moel::MoelUuid", &value)),
             value @ Value::UtcTimestamp(_) => {
                 Err(ValueError::type_mismatch("a moel::UtcTimestamp", &value))
             }
