@@ -13,10 +13,6 @@ use uuid::Uuid as RawUuid;
 use crate::diagnostics::{SourceSpan, document_span_for_path, parse_error_span};
 use crate::{Value, parse};
 
-const UUID_NEWTYPE: &str = "MOEL::Uuid";
-const UTC_TIMESTAMP_NEWTYPE: &str = "MOEL::UtcTimestamp";
-const TOML_DATETIME_NEWTYPE: &str = "MOEL::TomlDatetime";
-
 /// A UUID that can only be deserialized from MOEL's explicit UUID primitive.
 ///
 /// This wrapper deliberately does not accept an ordinary string that merely looks
@@ -83,7 +79,7 @@ impl<'de> Deserialize<'de> for MoelUuid {
             }
         }
 
-        deserializer.deserialize_newtype_struct(UUID_NEWTYPE, UuidVisitor)
+        deserializer.deserialize_any(UuidVisitor)
     }
 }
 
@@ -132,7 +128,7 @@ impl<'de> Deserialize<'de> for UtcTimestamp {
             }
         }
 
-        deserializer.deserialize_newtype_struct(UTC_TIMESTAMP_NEWTYPE, TimestampVisitor)
+        deserializer.deserialize_any(TimestampVisitor)
     }
 }
 
@@ -178,7 +174,7 @@ impl<'de> Deserialize<'de> for TomlDatetime {
             }
         }
 
-        deserializer.deserialize_newtype_struct(TOML_DATETIME_NEWTYPE, DatetimeVisitor)
+        deserializer.deserialize_any(DatetimeVisitor)
     }
 }
 
@@ -309,7 +305,11 @@ fn path_to_moel(path: &serde_path_to_error::Path) -> String {
                 let escaped = key.replace('\\', "\\\\").replace('"', "\\\"");
                 output.push_str(&format!("[\"{escaped}\"]"));
             }
-            Segment::Enum { .. } | Segment::Unknown => {}
+            Segment::Enum { variant } => {
+                let escaped = variant.replace('\\', "\\\\").replace('"', "\\"");
+                output.push_str(&format!("[\"{escaped}\"]"));
+            }
+            Segment::Unknown => {}
         }
     }
     output
@@ -379,15 +379,11 @@ impl<'de> de::Deserializer<'de> for ValueDeserializer {
             Value::Boolean(value) => visitor.visit_bool(value),
             Value::Array(values) => visitor.visit_seq(SeqDeserializer::new(values)),
             Value::Table(values) => visitor.visit_map(MapDeserializer::new(values)),
-            value @ Value::Uuid(_) => Err(ValueError::type_mismatch(
-                "an explicit moel::MoelUuid",
-                &value,
-            )),
-            value @ Value::UtcTimestamp(_) => {
-                Err(ValueError::type_mismatch("a moel::UtcTimestamp", &value))
-            }
-            value @ Value::TomlDatetime(_) => {
-                Err(ValueError::type_mismatch("a moel::TomlDatetime", &value))
+            Value::Uuid(value) => visitor.visit_newtype_struct(
+                StringDeserializer::<ValueError>::new(value.hyphenated().to_string()),
+            ),
+            Value::UtcTimestamp(value) | Value::TomlDatetime(value) => {
+                visitor.visit_newtype_struct(StringDeserializer::<ValueError>::new(value))
             }
         }
     }
@@ -586,34 +582,13 @@ impl<'de> de::Deserializer<'de> for ValueDeserializer {
 
     fn deserialize_newtype_struct<V>(
         self,
-        name: &'static str,
+        _name: &'static str,
         visitor: V,
     ) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
     {
-        let value = self.value;
-        match name {
-            UUID_NEWTYPE => match value {
-                Value::Uuid(value) => visitor.visit_newtype_struct(
-                    StringDeserializer::<ValueError>::new(value.hyphenated().to_string()),
-                ),
-                value => Err(ValueError::type_mismatch("explicit MOEL UUID", &value)),
-            },
-            UTC_TIMESTAMP_NEWTYPE => match value {
-                Value::UtcTimestamp(value) => {
-                    visitor.visit_newtype_struct(StringDeserializer::<ValueError>::new(value))
-                }
-                value => Err(ValueError::type_mismatch("UTC timestamp", &value)),
-            },
-            TOML_DATETIME_NEWTYPE => match value {
-                Value::TomlDatetime(value) => {
-                    visitor.visit_newtype_struct(StringDeserializer::<ValueError>::new(value))
-                }
-                value => Err(ValueError::type_mismatch("non-UTC TOML date/time", &value)),
-            },
-            _ => visitor.visit_newtype_struct(ValueDeserializer::new(value)),
-        }
+        visitor.visit_newtype_struct(self)
     }
 
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value, Self::Error>
