@@ -63,7 +63,7 @@ created = 2026-09-12T19:11:00Z
 
 `MoelUuid` accepts only the explicit MOEL UUID primitive; a normal quoted UUID-looking string remains a string and fails when a `MoelUuid` is required. `UtcTimestamp` likewise accepts only explicitly UTC TOML offset date-times, while `TomlDatetime` represents valid non-UTC TOML date/time values.
 
-`from_str` performs ordinary MOEL parsing only and does not discover `schema.moel`. Typed-data failures report deterministic MOEL paths and source spans when the failing value can be located.
+`from_str` performs ordinary MOEL parsing only and does not discover `schema.moel`. Typed-data failures report deterministic MOEL paths and source spans when Serde retains a concrete value path. Serde's own buffering for some flattened-field failures can reduce that path to the document root.
 ## CLI
 
 Check a MOEL or TOML document with:
