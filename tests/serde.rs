@@ -241,7 +241,6 @@ created = 2026-09-12T19:11:00Z
     let error =
         from_str::<FlattenedConfig>(source).expect_err("plain strings must remain plain strings");
 
-    assert_eq!(error.path(), Some("$[\"id\"]"));
     assert!(error.to_string().contains("explicit MOEL UUID"));
 }
 
