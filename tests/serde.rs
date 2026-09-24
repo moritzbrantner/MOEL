@@ -102,7 +102,10 @@ fn uuid_looking_string_is_not_promoted_to_typed_uuid() {
             .contains("expected explicit MOEL UUID, found string")
     );
     let span = error.span().expect("typed error must retain source span");
-    assert_eq!(&source[span.start..span.end], "\"550e8400-e29b-41d4-a716-446655440000\"");
+    assert_eq!(
+        &source[span.start..span.end],
+        "\"550e8400-e29b-41d4-a716-446655440000\""
+    );
 }
 
 #[derive(Debug, Deserialize)]
@@ -113,8 +116,8 @@ struct StringIdentity {
 #[test]
 fn explicit_uuid_is_not_silently_erased_into_string() {
     let source = "id = uuid\"550e8400-e29b-41d4-a716-446655440000\"\n";
-    let error =
-        from_str::<StringIdentity>(source).expect_err("explicit UUID must remain semantically typed");
+    let error = from_str::<StringIdentity>(source)
+        .expect_err("explicit UUID must remain semantically typed");
 
     assert_eq!(error.path(), Some("$[\"id\"]"));
     assert!(error.to_string().contains("expected string, found UUID"));
@@ -150,7 +153,9 @@ fn nested_type_errors_report_deterministic_path_and_source_span() {
     let error = from_str::<Ports>(source).expect_err("negative port must fail");
 
     assert_eq!(error.path(), Some("$[\"ports\"][1]"));
-    let span = error.span().expect("nested typed error must retain source span");
+    let span = error
+        .span()
+        .expect("nested typed error must retain source span");
     assert_eq!(&source[span.start..span.end], "-1");
 }
 
@@ -176,8 +181,8 @@ fn externally_tagged_enum_payloads_use_single_entry_tables() {
         }
     );
 
-    let window: StrategyConfig = from_str("strategy = { Window = { size = 8 } }\n")
-        .expect("struct enum must deserialize");
+    let window: StrategyConfig =
+        from_str("strategy = { Window = { size = 8 } }\n").expect("struct enum must deserialize");
     assert_eq!(
         window,
         StrategyConfig {
@@ -189,7 +194,8 @@ fn externally_tagged_enum_payloads_use_single_entry_tables() {
 #[test]
 fn parse_failures_remain_parse_failures_with_source_spans() {
     let source = "id = uuid\"not-a-uuid\"\n";
-    let error = from_str::<Identity>(source).expect_err("invalid UUID syntax must fail while parsing");
+    let error =
+        from_str::<Identity>(source).expect_err("invalid UUID syntax must fail while parsing");
 
     assert_eq!(error.path(), None);
     let span = error.span().expect("parse failure must retain source span");
