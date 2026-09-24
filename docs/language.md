@@ -147,7 +147,7 @@ Typed deserialization must preserve MOEL-only distinctions rather than recreatin
 - an ordinary string that happens to look like a UUID must not deserialize as the explicit MOEL UUID type;
 - an explicit MOEL UUID must not silently deserialize as an ordinary string;
 - a non-zero-offset or local TOML date/time value must not deserialize as the explicit UTC timestamp type;
-- typed-data errors should retain deterministic semantic paths and source spans when the failing source value is locatable.
+- typed-data errors should retain deterministic semantic paths and source spans when Serde retains a concrete value path; some failed flattened-field deserializations are reported by Serde at the document root after buffering.
 
 The Rust API exposes `MoelUuid`, `UtcTimestamp`, and `TomlDatetime` wrappers for these semantic values. `from_str` has the same schema-free parsing boundary as `parse`; consumers that require `schema.moel` validation still opt into schema discovery and validation separately.
 
