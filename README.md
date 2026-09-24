@@ -38,6 +38,32 @@ tags? = ["string"]
 
 Tables remain closed by default: undeclared fields are rejected. Fields are required unless their bare schema key ends in `?`; if an optional field is present, its declared type, enum, array, or nested-table schema is still enforced normally. Ordinary parsing never requires a schema.
 
+## Typed Rust deserialization
+
+MOEL can deserialize directly into owned Rust types through Serde without weakening its semantic extensions:
+
+```rust
+use moel::{MoelUuid, UtcTimestamp, from_str};
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct Config {
+    name: String,
+    id: MoelUuid,
+    created: UtcTimestamp,
+}
+
+let config: Config = from_str(r#"
+name = "example"
+id = uuid"550e8400-e29b-41d4-a716-446655440000"
+created = 2026-09-12T19:11:00Z
+"#)?;
+# Ok::<(), moel::DeserializeError>(())
+```
+
+`MoelUuid` accepts only the explicit MOEL UUID primitive; a normal quoted UUID-looking string remains a string and fails when a `MoelUuid` is required. `UtcTimestamp` likewise accepts only explicitly UTC TOML offset date-times, while `TomlDatetime` represents valid non-UTC TOML date/time values.
+
+`from_str` performs ordinary MOEL parsing only and does not discover `schema.moel`. Typed-data failures report deterministic MOEL paths and source spans when the failing value can be located.
 ## CLI
 
 Check a MOEL or TOML document with:
