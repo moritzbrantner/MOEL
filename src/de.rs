@@ -409,24 +409,21 @@ impl<'de> de::Deserializer<'de> for ValueDeserializer {
             Value::Boolean(value) => visitor.visit_bool(value),
             Value::Array(values) => visitor.visit_seq(SeqDeserializer::new(values)),
             Value::Table(values) => visitor.visit_map(MapDeserializer::new(values)),
-            Value::Uuid(value) => visitor.visit_newtype_struct(
-                StringDeserializer::<ValueError>::new(encode_semantic(
-                    UUID_MARKER,
-                    &value.hyphenated().to_string(),
-                )),
-            ),
-            Value::UtcTimestamp(value) => visitor.visit_newtype_struct(
-                StringDeserializer::<ValueError>::new(encode_semantic(
-                    UTC_TIMESTAMP_MARKER,
-                    &value,
-                )),
-            ),
-            Value::TomlDatetime(value) => visitor.visit_newtype_struct(
-                StringDeserializer::<ValueError>::new(encode_semantic(
-                    TOML_DATETIME_MARKER,
-                    &value,
-                )),
-            ),
+            Value::Uuid(value) => {
+                visitor.visit_newtype_struct(StringDeserializer::<ValueError>::new(
+                    encode_semantic(UUID_MARKER, &value.hyphenated().to_string()),
+                ))
+            }
+            Value::UtcTimestamp(value) => {
+                visitor.visit_newtype_struct(StringDeserializer::<ValueError>::new(
+                    encode_semantic(UTC_TIMESTAMP_MARKER, &value),
+                ))
+            }
+            Value::TomlDatetime(value) => {
+                visitor.visit_newtype_struct(StringDeserializer::<ValueError>::new(
+                    encode_semantic(TOML_DATETIME_MARKER, &value),
+                ))
+            }
         }
     }
 
