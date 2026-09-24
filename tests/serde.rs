@@ -86,6 +86,7 @@ limit = 0
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct Identity {
     id: MoelUuid,
 }
@@ -109,6 +110,7 @@ fn uuid_looking_string_is_not_promoted_to_typed_uuid() {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct StringIdentity {
     id: String,
 }
@@ -124,6 +126,7 @@ fn explicit_uuid_is_not_silently_erased_into_string() {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct TimestampConfig {
     created: UtcTimestamp,
 }
@@ -143,6 +146,7 @@ fn non_utc_datetime_does_not_deserialize_as_utc() {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct Ports {
     ports: Vec<u16>,
 }
