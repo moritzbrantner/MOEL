@@ -115,7 +115,11 @@ pub fn validation_span(
     })
 }
 
-/// Locate a semantic MOEL value path in the original document source.\n///\n/// Paths use the same deterministic form as schema diagnostics, for example\n/// \`$[\"profile\"][\"age\"]\` or \`$[\"items\"][0]\`.\npub fn document_span_for_path(source: &str, path: &str) -> Option<SourceSpan> {
+/// Locate a semantic MOEL value path in the original document source.
+///
+/// Paths use the same deterministic form as schema diagnostics, for example
+/// `$["profile"]["age"]` or `$["items"][0]`.
+pub fn document_span_for_path(source: &str, path: &str) -> Option<SourceSpan> {
     let masked = mask_uuid_literals(source);
     let document = toml_edit::Document::parse(masked.as_str()).ok()?;
     let mut spans = BTreeMap::new();
