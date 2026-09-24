@@ -97,11 +97,7 @@ fn uuid_looking_string_is_not_promoted_to_typed_uuid() {
     let error = from_str::<Identity>(source).expect_err("ordinary string must stay a string");
 
     assert_eq!(error.path(), Some("$[\"id\"]"));
-    assert!(
-        error
-            .to_string()
-            .contains("explicit MOEL UUID")
-    );
+    assert!(error.to_string().contains("explicit MOEL UUID"));
     let span = error.span().expect("typed error must retain source span");
     assert_eq!(
         &source[span.start..span.end],
@@ -138,11 +134,7 @@ fn non_utc_datetime_does_not_deserialize_as_utc() {
         from_str::<TimestampConfig>(source).expect_err("non-zero offset must not become UTC");
 
     assert_eq!(error.path(), Some("$[\"created\"]"));
-    assert!(
-        error
-            .to_string()
-            .contains("MOEL UTC timestamp")
-    );
+    assert!(error.to_string().contains("MOEL UTC timestamp"));
 }
 
 #[derive(Debug, Deserialize)]
@@ -205,7 +197,6 @@ fn parse_failures_remain_parse_failures_with_source_spans() {
     let span = error.span().expect("parse failure must retain source span");
     assert_eq!(&source[span.start..span.end], "uuid\"not-a-uuid\"");
 }
-
 
 #[derive(Debug, Deserialize, PartialEq)]
 struct FlattenedConfig {
@@ -316,10 +307,7 @@ event = { kind = "Created", id = uuid"550e8400-e29b-41d4-a716-446655440000", at 
         from_str(source).expect("internally tagged enum buffering must preserve semantic values");
 
     let Event::Created { id, at } = config.event;
-    assert_eq!(
-        id.to_string(),
-        "550e8400-e29b-41d4-a716-446655440000"
-    );
+    assert_eq!(id.to_string(), "550e8400-e29b-41d4-a716-446655440000");
     assert_eq!(at.as_str(), "2026-09-12T19:11:00Z");
 }
 
@@ -329,10 +317,7 @@ fn externally_tagged_enum_errors_retain_variant_path_and_span() {
     let error =
         from_str::<StrategyConfig>(source).expect_err("negative unsigned enum field must fail");
 
-    assert_eq!(
-        error.path(),
-        Some("$[\"strategy\"][\"Window\"][\"size\"]")
-    );
+    assert_eq!(error.path(), Some("$[\"strategy\"][\"Window\"][\"size\"]"));
     let span = error
         .span()
         .expect("enum payload error must retain its source span");
