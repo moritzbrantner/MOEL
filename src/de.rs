@@ -13,6 +13,27 @@ use uuid::Uuid as RawUuid;
 use crate::diagnostics::{SourceSpan, document_span_for_path, parse_error_span};
 use crate::{Value, parse};
 
+const UUID_MARKER: &str = "\0MOEL::Uuid\0";
+const UTC_TIMESTAMP_MARKER: &str = "\0MOEL::UtcTimestamp\0";
+const TOML_DATETIME_MARKER: &str = "\0MOEL::TomlDatetime\0";
+
+fn encode_semantic(marker: &str, value: &str) -> String {
+    let mut encoded = String::with_capacity(marker.len() + value.len());
+    encoded.push_str(marker);
+    encoded.push_str(value);
+    encoded
+}
+
+fn decode_semantic<E>(encoded: String, marker: &str, expected: &str) -> Result<String, E>
+where
+    E: de::Error,
+{
+    encoded
+        .strip_prefix(marker)
+        .map(str::to_owned)
+        .ok_or_else(|| E::custom(format!("expected {expected}")))
+}
+
 /// A UUID that can only be deserialized from MOEL's explicit UUID primitive.
 ///
 /// This wrapper deliberately does not accept an ordinary string that merely looks
@@ -72,7 +93,8 @@ impl<'de> Deserialize<'de> for MoelUuid {
             where
                 D: de::Deserializer<'de>,
             {
-                let value = String::deserialize(deserializer)?;
+                let encoded = String::deserialize(deserializer)?;
+                let value = decode_semantic(encoded, UUID_MARKER, "an explicit MOEL UUID")?;
                 RawUuid::parse_str(&value)
                     .map(MoelUuid)
                     .map_err(de::Error::custom)
@@ -124,7 +146,9 @@ impl<'de> Deserialize<'de> for UtcTimestamp {
             where
                 D: de::Deserializer<'de>,
             {
-                String::deserialize(deserializer).map(UtcTimestamp)
+                let encoded = String::deserialize(deserializer)?;
+                decode_semantic(encoded, UTC_TIMESTAMP_MARKER, "a MOEL UTC timestamp")
+                    .map(UtcTimestamp)
             }
         }
 
@@ -170,7 +194,13 @@ impl<'de> Deserialize<'de> for TomlDatetime {
             where
                 D: de::Deserializer<'de>,
             {
-                String::deserialize(deserializer).map(TomlDatetime)
+                let encoded = String::deserialize(deserializer)?;
+                decode_semantic(
+                    encoded,
+                    TOML_DATETIME_MARKER,
+                    "a non-UTC TOML date/time value",
+                )
+                .map(TomlDatetime)
             }
         }
 
@@ -380,11 +410,23 @@ impl<'de> de::Deserializer<'de> for ValueDeserializer {
             Value::Array(values) => visitor.visit_seq(SeqDeserializer::new(values)),
             Value::Table(values) => visitor.visit_map(MapDeserializer::new(values)),
             Value::Uuid(value) => visitor.visit_newtype_struct(
-                StringDeserializer::<ValueError>::new(value.hyphenated().to_string()),
+                StringDeserializer::<ValueError>::new(encode_semantic(
+                    UUID_MARKER,
+                    &value.hyphenated().to_string(),
+                )),
             ),
-            Value::UtcTimestamp(value) | Value::TomlDatetime(value) => {
-                visitor.visit_newtype_struct(StringDeserializer::<ValueError>::new(value))
-            }
+            Value::UtcTimestamp(value) => visitor.visit_newtype_struct(
+                StringDeserializer::<ValueError>::new(encode_semantic(
+                    UTC_TIMESTAMP_MARKER,
+                    &value,
+                )),
+            ),
+            Value::TomlDatetime(value) => visitor.visit_newtype_struct(
+                StringDeserializer::<ValueError>::new(encode_semantic(
+                    TOML_DATETIME_MARKER,
+                    &value,
+                )),
+            ),
         }
     }
 
