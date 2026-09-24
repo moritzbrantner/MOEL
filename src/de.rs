@@ -186,7 +186,7 @@ impl<'de> Deserialize<'de> for TomlDatetime {
 #[derive(Debug)]
 pub enum DeserializeError {
     Parse {
-        error: crate::Error,
+        error: Box<crate::Error>,
         span: Option<SourceSpan>,
     },
     Data {
@@ -244,7 +244,7 @@ impl fmt::Display for DeserializeError {
 impl std::error::Error for DeserializeError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Parse { error, .. } => Some(error),
+            Self::Parse { error, .. } => Some(error.as_ref()),
             Self::Data { .. } => None,
         }
     }
@@ -261,7 +261,10 @@ where
 {
     let value = parse(source).map_err(|error| {
         let span = parse_error_span(source, &error);
-        DeserializeError::Parse { error, span }
+        DeserializeError::Parse {
+            error: Box::new(error),
+            span,
+        }
     })?;
 
     deserialize_tracked(value).map_err(|(path, message)| DeserializeError::Data {
