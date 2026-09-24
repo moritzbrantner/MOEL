@@ -2,11 +2,11 @@ use std::collections::btree_map;
 use std::fmt;
 
 use serde::Deserialize;
+use serde::de::value::StringDeserializer;
 use serde::de::{
     self, DeserializeOwned, DeserializeSeed, EnumAccess, MapAccess, SeqAccess, VariantAccess,
     Visitor,
 };
-use serde::de::value::StringDeserializer;
 use serde_path_to_error::Segment;
 use uuid::Uuid as RawUuid;
 
@@ -376,7 +376,10 @@ impl<'de> de::Deserializer<'de> for ValueDeserializer {
             Value::Boolean(value) => visitor.visit_bool(value),
             Value::Array(values) => visitor.visit_seq(SeqDeserializer::new(values)),
             Value::Table(values) => visitor.visit_map(MapDeserializer::new(values)),
-            value @ Value::Uuid(_) => Err(ValueError::type_mismatch("an explicit moel::MoelUuid", &value)),
+            value @ Value::Uuid(_) => Err(ValueError::type_mismatch(
+                "an explicit moel::MoelUuid",
+                &value,
+            )),
             value @ Value::UtcTimestamp(_) => {
                 Err(ValueError::type_mismatch("a moel::UtcTimestamp", &value))
             }
@@ -464,7 +467,9 @@ impl<'de> de::Deserializer<'de> for ValueDeserializer {
     {
         match self.value {
             Value::Integer(value) if value >= 0 => visitor.visit_u64(value as u64),
-            Value::Integer(_) => Err(ValueError("expected unsigned integer, found negative integer".into())),
+            Value::Integer(_) => Err(ValueError(
+                "expected unsigned integer, found negative integer".into(),
+            )),
             value => Err(ValueError::type_mismatch("unsigned integer", &value)),
         }
     }
@@ -508,7 +513,9 @@ impl<'de> de::Deserializer<'de> for ValueDeserializer {
                     return Err(ValueError("expected character, found empty string".into()));
                 };
                 if chars.next().is_some() {
-                    return Err(ValueError("expected character, found multi-character string".into()));
+                    return Err(ValueError(
+                        "expected character, found multi-character string".into(),
+                    ));
                 }
                 visitor.visit_char(ch)
             }
@@ -589,15 +596,15 @@ impl<'de> de::Deserializer<'de> for ValueDeserializer {
                 value => Err(ValueError::type_mismatch("explicit MOEL UUID", &value)),
             },
             UTC_TIMESTAMP_NEWTYPE => match value {
-                Value::UtcTimestamp(value) => visitor.visit_newtype_struct(
-                    StringDeserializer::<ValueError>::new(value),
-                ),
+                Value::UtcTimestamp(value) => {
+                    visitor.visit_newtype_struct(StringDeserializer::<ValueError>::new(value))
+                }
                 value => Err(ValueError::type_mismatch("UTC timestamp", &value)),
             },
             TOML_DATETIME_NEWTYPE => match value {
-                Value::TomlDatetime(value) => visitor.visit_newtype_struct(
-                    StringDeserializer::<ValueError>::new(value),
-                ),
+                Value::TomlDatetime(value) => {
+                    visitor.visit_newtype_struct(StringDeserializer::<ValueError>::new(value))
+                }
                 value => Err(ValueError::type_mismatch("non-UTC TOML date/time", &value)),
             },
             _ => visitor.visit_newtype_struct(ValueDeserializer::new(value)),
