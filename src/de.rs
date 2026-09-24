@@ -336,7 +336,7 @@ fn path_to_moel(path: &serde_path_to_error::Path) -> String {
                 output.push_str(&format!("[\"{escaped}\"]"));
             }
             Segment::Enum { variant } => {
-                let escaped = variant.replace('\\', "\\\\").replace('"', "\\"");
+                let escaped = variant.replace('\\', "\\\\").replace('"', "\\\"");
                 output.push_str(&format!("[\"{escaped}\"]"));
             }
             Segment::Unknown => {}
