@@ -480,7 +480,9 @@ impl<'de> de::Deserializer<'de> for ValueDeserializer {
     {
         match self.value {
             Value::Integer(value) if value >= 0 => visitor.visit_u128(value as u128),
-            Value::Integer(_) => Err(ValueError("expected unsigned integer, found negative integer".into())),
+            Value::Integer(_) => Err(ValueError(
+                "expected unsigned integer, found negative integer".into(),
+            )),
             value => Err(ValueError::type_mismatch("unsigned integer", &value)),
         }
     }
