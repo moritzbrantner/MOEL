@@ -1,5 +1,8 @@
+pub mod de;
 pub mod diagnostics;
 pub mod schema;
+
+pub use de::{DeserializeError, MoelUuid, TomlDatetime, UtcTimestamp, from_str, from_value};
 
 use std::collections::BTreeMap;
 use std::fmt;
